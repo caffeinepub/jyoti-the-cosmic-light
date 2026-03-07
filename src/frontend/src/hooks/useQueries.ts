@@ -18,6 +18,24 @@ export function useAvailableSlots() {
       return actor.getAvailableSlots();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+}
+
+export function useAllSlots() {
+  const { actor, isFetching } = useActor();
+  return useQuery<AvailableSlot[]>({
+    queryKey: ["allSlots"],
+    queryFn: async () => {
+      if (!actor) return [];
+      const result = await actor.getAllSlots();
+      if (result.__kind__ === "ok") return result.ok;
+      return [];
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 }
 
@@ -354,6 +372,7 @@ export function useAddSlot() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["availableSlots"] });
+      queryClient.invalidateQueries({ queryKey: ["allSlots"] });
     },
   });
 }
@@ -370,6 +389,7 @@ export function useRemoveSlot() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["availableSlots"] });
+      queryClient.invalidateQueries({ queryKey: ["allSlots"] });
     },
   });
 }

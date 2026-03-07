@@ -69,7 +69,7 @@ import {
   useAdminGetAllCoinBalances,
   useAdminGetAllReferrals,
   useAllRemedies,
-  useAvailableSlots,
+  useAllSlots,
   useBookings,
   useCancelBooking,
   useClaimFirstAdmin,
@@ -96,40 +96,11 @@ import {
 const ADMIN_TAB_CLS =
   "data-[state=active]:bg-gold data-[state=active]:text-navy-deep font-body tracking-wider rounded-sm px-4 py-2 text-cream/60 text-sm";
 
-/**
- * Reads caffeineAdminToken from the URL query string and saves it to
- * sessionStorage so that useActor can read it via getSecretParameter.
- * Safe to call multiple times — does nothing if token is not in URL.
- */
-function persistAdminToken() {
-  try {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get("caffeineAdminToken");
-    if (token) {
-      sessionStorage.setItem("caffeineAdminToken", token);
-      // Clean the token from the address bar so it's not visible in history
-      const cleanUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState(null, "", cleanUrl);
-    }
-  } catch {
-    // sessionStorage may be unavailable in some environments
-  }
-}
-
 export function AdminPage() {
   const { identity, login, loginStatus, isInitializing } =
     useInternetIdentity();
   const { isFetching: isActorFetching } = useActor();
   const { data: isAdminUser, isLoading: isAdminLoading } = useIsAdmin();
-
-  // Persist admin token from URL query string into sessionStorage BEFORE
-  // Internet Identity login redirect wipes the URL parameters.
-  // MUST run synchronously at module-load time AND in useEffect for safety.
-  useEffect(() => {
-    persistAdminToken();
-  }, []);
-  // Also persist immediately (sync) so useActor can read it on first render
-  persistAdminToken();
 
   // Add a timeout so loading never spins forever after login
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
@@ -184,21 +155,6 @@ function AdminLogin({
   onLogin: () => void;
   loginStatus: string;
 }) {
-  // Persist token before II login wipes the URL (redundant safety net —
-  // AdminPage root also does this, but capturing here ensures it runs even
-  // if the user navigates directly to /admin with a token)
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get("caffeineAdminToken");
-    if (token) {
-      try {
-        sessionStorage.setItem("caffeineAdminToken", token);
-      } catch {}
-      const cleanUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState(null, "", cleanUrl);
-    }
-  }, []);
-
   return (
     <div
       className="min-h-screen flex items-center justify-center pt-24 px-6"
@@ -237,174 +193,46 @@ function AdminUnauthorized() {
   const { clear } = useInternetIdentity();
   const claimFirstAdmin = useClaimFirstAdmin();
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<"initial" | "token-entry" | "instructions">(
-    "initial",
-  );
-  const [adminToken, setAdminToken] = useState("");
   const [claimError, setClaimError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // First try a simple claimFirstAdmin on mount (works if no admin has been set yet)
-  const claimMutateAsync = claimFirstAdmin.mutateAsync;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once on mount
-  useEffect(() => {
-    let cancelled = false;
-    const trySimpleClaim = async () => {
-      try {
-        const success = await claimMutateAsync();
-        if (!cancelled && success) {
-          window.location.reload();
-        } else if (!cancelled) {
-          // Admin already claimed — show token entry
-          setStep("token-entry");
-        }
-      } catch {
-        if (!cancelled) setStep("token-entry");
-      }
-    };
-    trySimpleClaim();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleRefresh = async () => {
+  const handleRecheck = async () => {
     setIsRefreshing(true);
+    setClaimError(null);
     await queryClient.invalidateQueries({ queryKey: ["isAdmin"] });
+    await queryClient.refetchQueries({ queryKey: ["isAdmin"] });
     await queryClient.invalidateQueries({ queryKey: ["actor"] });
     setTimeout(() => {
       setIsRefreshing(false);
       window.location.reload();
-    }, 1500);
+    }, 1000);
   };
 
-  const handleSignOutAndRetry = () => {
-    // Save the token to sessionStorage so useActor picks it up after re-login
-    if (adminToken.trim()) {
-      try {
-        sessionStorage.setItem("caffeineAdminToken", adminToken.trim());
-      } catch {}
-    }
+  const handleSignOut = () => {
     clear();
     setTimeout(() => {
       window.location.href = window.location.pathname;
     }, 400);
   };
 
-  const handleTokenSubmit = () => {
-    if (!adminToken.trim()) return;
-    // Save token then sign out — on next login, useActor will call
-    // _initializeAccessControlWithSecret(token) which grants admin
-    // if this identity is not yet registered in the backend.
-    // Show instructions first.
+  const handleClaimFirstTime = async () => {
+    setClaimError(null);
     try {
-      sessionStorage.setItem("caffeineAdminToken", adminToken.trim());
-    } catch {}
-    setStep("instructions");
+      const success = await claimFirstAdmin.mutateAsync();
+      if (success) {
+        window.location.reload();
+      } else {
+        setClaimError(
+          "An admin is already registered. Please sign out and sign in with your original admin identity.",
+        );
+      }
+    } catch {
+      setClaimError(
+        "An admin is already registered. Please sign out and sign in with your original admin identity.",
+      );
+    }
   };
 
-  if (step === "initial") {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center pt-24 px-6"
-        style={{ background: "oklch(0.09 0.025 260)" }}
-        data-ocid="admin.loading_state"
-      >
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 text-gold animate-spin mx-auto mb-4" />
-          <p className="font-body text-cream/50 text-sm">Verifying access…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "instructions") {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center pt-24 px-6"
-        style={{ background: "oklch(0.09 0.025 260)" }}
-        data-ocid="admin.error_state"
-      >
-        <div className="text-center max-w-md w-full">
-          <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
-            <Shield className="w-8 h-8 text-gold" />
-          </div>
-          <h1 className="font-display text-3xl text-cream mb-3">
-            Almost There
-          </h1>
-          <div className="gold-divider w-20 mx-auto mb-6" />
-
-          <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left space-y-4 mb-6">
-            <p className="font-body text-cream/80 text-sm font-medium">
-              Follow these steps:
-            </p>
-            <ol className="space-y-3">
-              <li className="flex gap-3">
-                <span className="text-gold font-display text-lg leading-none mt-0.5">
-                  1.
-                </span>
-                <p className="font-body text-cream/70 text-sm leading-relaxed">
-                  Click <strong className="text-cream">"Sign Out"</strong> below
-                  to clear your current session.
-                </p>
-              </li>
-              <li className="flex gap-3">
-                <span className="text-gold font-display text-lg leading-none mt-0.5">
-                  2.
-                </span>
-                <p className="font-body text-cream/70 text-sm leading-relaxed">
-                  When the login screen appears, click{" "}
-                  <strong className="text-cream">
-                    "Sign In with Internet Identity"
-                  </strong>
-                  .
-                </p>
-              </li>
-              <li className="flex gap-3">
-                <span className="text-gold font-display text-lg leading-none mt-0.5">
-                  3.
-                </span>
-                <p className="font-body text-cream/70 text-sm leading-relaxed">
-                  In the Internet Identity popup, click{" "}
-                  <strong className="text-gold">"Create New"</strong> to create
-                  a fresh identity (this is required — your previous identity is
-                  registered as a regular user and cannot be upgraded).
-                </p>
-              </li>
-              <li className="flex gap-3">
-                <span className="text-gold font-display text-lg leading-none mt-0.5">
-                  4.
-                </span>
-                <p className="font-body text-cream/70 text-sm leading-relaxed">
-                  Complete the fingerprint/face ID setup for the new identity,
-                  then return to the admin panel. You will be granted admin
-                  access automatically.
-                </p>
-              </li>
-            </ol>
-          </div>
-
-          <Button
-            onClick={handleSignOutAndRetry}
-            data-ocid="admin.signout.primary_button"
-            className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2 mb-3"
-          >
-            Sign Out &amp; Start Fresh
-          </Button>
-          <Button
-            onClick={() => setStep("token-entry")}
-            variant="ghost"
-            data-ocid="admin.back.secondary_button"
-            className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/40 hover:text-cream hover:bg-cream/5"
-          >
-            Back
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // step === "token-entry"
   return (
     <div
       className="min-h-screen flex items-center justify-center pt-24 px-6"
@@ -415,17 +243,16 @@ function AdminUnauthorized() {
         <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
           <Shield className="w-8 h-8 text-gold" />
         </div>
-        <h1 className="font-display text-3xl text-cream mb-3">Admin Access</h1>
+        <h1 className="font-display text-3xl text-cream mb-3">Access Denied</h1>
         <div className="gold-divider w-20 mx-auto mb-6" />
 
-        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left space-y-2 mb-6">
+        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6">
           <p className="font-body text-cream/80 text-sm leading-relaxed">
-            Your identity is not registered as admin. To gain access, enter the
-            admin token from your Caffeine dashboard below.
-          </p>
-          <p className="font-body text-cream/50 text-xs leading-relaxed">
-            The token is shown in your Caffeine project settings. It looks like
-            a long string of letters and numbers.
+            Your Internet Identity is not registered as admin. If you just
+            signed in, try clicking{" "}
+            <strong className="text-gold">"Re-check Admin Status"</strong>. If
+            that doesn't work, sign out and sign back in with the same device
+            you used when you first claimed admin access.
           </p>
         </div>
 
@@ -438,48 +265,57 @@ function AdminUnauthorized() {
           </div>
         )}
 
-        <div className="space-y-3 mb-6">
-          <input
-            type="text"
-            data-ocid="admin.token.input"
-            placeholder="Paste your admin token here…"
-            value={adminToken}
-            onChange={(e) => {
-              setAdminToken(e.target.value);
-              setClaimError(null);
-            }}
-            className="w-full px-4 py-3 bg-card/60 border border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body text-sm outline-none focus:ring-1 focus:ring-gold/30"
-          />
+        <div className="space-y-3">
+          <Button
+            onClick={handleRecheck}
+            disabled={isRefreshing}
+            data-ocid="admin.recheck.primary_button"
+            className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
+          >
+            {isRefreshing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Checking…
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                Re-check Admin Status
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={handleSignOut}
+            variant="ghost"
+            data-ocid="admin.signout.secondary_button"
+            className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/60 hover:text-cream hover:bg-cream/5 border border-gold/20"
+          >
+            Sign Out
+          </Button>
+
+          <div className="pt-2 border-t border-gold/10">
+            <p className="font-body text-cream/35 text-xs mb-3">
+              First time setting up? Use this only if no admin exists yet.
+            </p>
+            <Button
+              onClick={handleClaimFirstTime}
+              disabled={claimFirstAdmin.isPending}
+              variant="ghost"
+              data-ocid="admin.claim.button"
+              className="w-full py-3 tracking-widest uppercase text-xs rounded-none text-cream/40 hover:text-cream hover:bg-cream/5"
+            >
+              {claimFirstAdmin.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Claiming…
+                </>
+              ) : (
+                "Claim Admin (First Time Only)"
+              )}
+            </Button>
+          </div>
         </div>
-
-        <Button
-          onClick={handleTokenSubmit}
-          disabled={!adminToken.trim()}
-          data-ocid="admin.token.primary_button"
-          className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2 mb-3"
-        >
-          Continue
-        </Button>
-
-        <Button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          data-ocid="admin.refresh.button"
-          variant="ghost"
-          className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-gold/70 hover:text-gold hover:bg-gold/5 border border-gold/20 inline-flex items-center justify-center gap-2"
-        >
-          {isRefreshing ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Checking…
-            </>
-          ) : (
-            <>
-              <RefreshCw className="w-4 h-4" />
-              I'm already admin — Re-check
-            </>
-          )}
-        </Button>
       </div>
     </div>
   );
@@ -606,7 +442,7 @@ function AdminDashboard() {
 function AvailabilityTab() {
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
-  const { data: slots, isLoading } = useAvailableSlots();
+  const { data: slots, isLoading } = useAllSlots();
   const addSlot = useAddSlot();
   const removeSlot = useRemoveSlot();
 

@@ -42,22 +42,16 @@ const SERVICES = [
   {
     id: "birth-chart",
     name: "Birth Chart Reading",
-    duration: "45–60 min",
-    defaultPrice: "₹1,500",
     desc: "A comprehensive reading of your natal chart — personality, strengths, and life direction.",
   },
   {
     id: "life-guidance",
     name: "Life Guidance Session",
-    duration: "45–60 min",
-    defaultPrice: "₹2,000",
     desc: "Focused consultation on career, relationships, or major life decisions.",
   },
   {
     id: "psychological",
     name: "Psychological Astrology",
-    duration: "45–60 min",
-    defaultPrice: "₹2,500",
     desc: "Deep exploration of mind patterns and recurring behavioral tendencies.",
   },
 ];
@@ -358,12 +352,6 @@ export function BookingPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const getFeeForService = (serviceId: string) => {
-    const serviceName = SERVICE_NAMES[serviceId];
-    if (!serviceName || !serviceFees) return null;
-    return serviceFees.find((f) => f.serviceName === serviceName) ?? null;
-  };
-
   const handleApplyCoupon = async () => {
     if (!couponInput.trim()) return;
     setCouponError("");
@@ -550,7 +538,6 @@ export function BookingPage() {
               Choose Your Consultation
             </h2>
             {SERVICES.map((service) => {
-              const fee = getFeeForService(service.id);
               return (
                 <button
                   type="button"
@@ -565,24 +552,9 @@ export function BookingPage() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2 flex-wrap">
-                        <h3 className="font-display text-xl text-cream group-hover:text-gold transition-colors">
-                          {service.name}
-                        </h3>
-                        <span className="text-gold/50 text-xs font-body tracking-wider border border-gold/20 px-2 py-0.5 rounded-sm">
-                          {service.duration}
-                        </span>
-                        {fee ? (
-                          <span className="text-gold text-sm font-body font-medium border border-gold/30 bg-gold/10 px-2.5 py-0.5 rounded-sm">
-                            {fee.currency === "INR" ? "₹" : fee.currency}
-                            {Number(fee.amount).toLocaleString("en-IN")}
-                          </span>
-                        ) : (
-                          <span className="text-gold text-sm font-body font-medium border border-gold/30 bg-gold/10 px-2.5 py-0.5 rounded-sm">
-                            {service.defaultPrice}
-                          </span>
-                        )}
-                      </div>
+                      <h3 className="font-display text-xl text-cream group-hover:text-gold transition-colors mb-2">
+                        {service.name}
+                      </h3>
                       <p className="font-body text-cream/65 text-base">
                         {service.desc}
                       </p>
