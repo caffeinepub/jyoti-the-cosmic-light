@@ -34,26 +34,38 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Calendar,
   Check,
+  CircleDollarSign,
   Edit2,
+  Gift,
   IndianRupee,
   Loader2,
+  MessageSquare,
   Plus,
   Shield,
   Sparkles,
+  Star,
   Tag,
   Ticket,
   Trash2,
   Users,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { AvailableSlot, Booking, Coupon, Remedy } from "../backend.d";
+import type {
+  AvailableSlot,
+  Booking,
+  Coupon,
+  Referral,
+  Remedy,
+} from "../backend.d";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useAddRemedy,
   useAddSlot,
+  useAdminGetAllCoinBalances,
+  useAdminGetAllReferrals,
   useAllRemedies,
   useAvailableSlots,
   useBookings,
@@ -64,6 +76,7 @@ import {
   useDeleteRemedy,
   useIsAdmin,
   useListCoupons,
+  useRedeemCoins,
   useRemoveServiceFee,
   useRemoveSlot,
   useServiceFees,
@@ -71,6 +84,12 @@ import {
   useToggleCouponStatus,
   useUpdateRemedy,
 } from "../hooks/useQueries";
+import {
+  type LocalReview,
+  approveLocalReview,
+  deleteLocalReview,
+  loadLocalReviews,
+} from "../utils/reviewsStore";
 
 const ADMIN_TAB_CLS =
   "data-[state=active]:bg-gold data-[state=active]:text-navy-deep font-body tracking-wider rounded-sm px-4 py-2 text-cream/60 text-sm";
@@ -81,18 +100,23 @@ export function AdminPage() {
   const { isFetching: isActorFetching } = useActor();
   const { data: isAdminUser, isLoading: isAdminLoading } = useIsAdmin();
 
+  // Add a timeout so loading never spins forever after login
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLoadingTimedOut(true), 6000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Determine if identity is a genuine authenticated (non-anonymous) principal
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
 
   // Show loading while initializing auth, building the actor, or checking admin status.
-  // Also keep loading if we have an authenticated identity but the actor hasn't
-  // finished refreshing yet — prevents a flash of the "Access Denied" screen while
-  // the actor is transitioning from anonymous to authenticated.
-  if (
-    isInitializing ||
-    isAdminLoading ||
-    (isAuthenticated && isActorFetching)
-  ) {
+  // Stop loading after 6 seconds regardless to prevent infinite spinner.
+  const isLoading =
+    !loadingTimedOut &&
+    (isInitializing || isAdminLoading || (isAuthenticated && isActorFetching));
+
+  if (isLoading) {
     return <AdminLoading />;
   }
 
@@ -166,20 +190,26 @@ function AdminUnauthorized() {
   const { identity, login, loginStatus } = useInternetIdentity();
   const claimFirstAdmin = useClaimFirstAdmin();
   const [claimed, setClaimed] = useState(false);
-  const [claimFailed, setClaimFailed] = useState(false);
+  const [claimError, setClaimError] = useState<string>("");
 
   // Check if the current identity is genuinely authenticated (non-anonymous)
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
 
   const handleClaim = async () => {
     if (!isAuthenticated) return;
-    setClaimFailed(false);
+    setClaimError("");
     try {
-      await claimFirstAdmin.mutateAsync();
-      setClaimed(true);
-      setTimeout(() => window.location.reload(), 1500);
-    } catch {
-      setClaimFailed(true);
+      const result = await claimFirstAdmin.mutateAsync();
+      if (result) {
+        setClaimed(true);
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        setClaimError(
+          "Could not claim admin — an admin is already assigned for this app. If you are Minakshi and this is unexpected, please contact support.",
+        );
+      }
+    } catch (e: unknown) {
+      setClaimError(e instanceof Error ? e.message : "Could not claim admin.");
     }
   };
 
@@ -189,7 +219,7 @@ function AdminUnauthorized() {
       style={{ background: "oklch(0.09 0.025 260)" }}
       data-ocid="admin.error_state"
     >
-      <div className="text-center max-w-sm w-full">
+      <div className="text-center max-w-md w-full">
         {isAuthenticated ? (
           <>
             <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
@@ -199,10 +229,7 @@ function AdminUnauthorized() {
               Claim Admin Access
             </h1>
             <div className="gold-divider w-20 mx-auto mb-6" />
-            <p className="font-body text-cream/60 mb-8">
-              You are signed in. Click below to become the admin of this site.
-              This only works if no admin has been set yet.
-            </p>
+
             {claimed ? (
               <p
                 className="font-body text-gold text-sm"
@@ -212,6 +239,11 @@ function AdminUnauthorized() {
               </p>
             ) : (
               <>
+                <p className="font-body text-cream/60 mb-8">
+                  If you are Minakshi, click below to register as the admin.
+                  This can only be done once.
+                </p>
+
                 <Button
                   onClick={handleClaim}
                   disabled={claimFirstAdmin.isPending}
@@ -227,13 +259,13 @@ function AdminUnauthorized() {
                     "Set Me As Admin"
                   )}
                 </Button>
-                {claimFailed && (
+
+                {claimError && (
                   <p
                     className="font-body text-destructive text-sm mt-4"
                     data-ocid="admin.claim.error_state"
                   >
-                    Could not claim admin. An admin may already be assigned.
-                    Please contact support.
+                    {claimError}
                   </p>
                 )}
               </>
@@ -338,6 +370,22 @@ function AdminDashboard() {
               <Sparkles className="w-4 h-4 mr-2" />
               Remedies
             </TabsTrigger>
+            <TabsTrigger
+              value="refercoins"
+              data-ocid="admin.refercoins.tab"
+              className={ADMIN_TAB_CLS}
+            >
+              <Gift className="w-4 h-4 mr-2" />
+              Refer Coins
+            </TabsTrigger>
+            <TabsTrigger
+              value="reviews"
+              data-ocid="admin.reviews.tab"
+              className={ADMIN_TAB_CLS}
+            >
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Reviews
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="availability">
@@ -358,6 +406,14 @@ function AdminDashboard() {
 
           <TabsContent value="remedies">
             <RemediesTab />
+          </TabsContent>
+
+          <TabsContent value="refercoins">
+            <ReferCoinsTab />
+          </TabsContent>
+
+          <TabsContent value="reviews">
+            <AdminReviewsTab />
           </TabsContent>
         </Tabs>
       </div>
@@ -1667,6 +1723,523 @@ function RemediesTab() {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// ── Refer Coins Tab ──────────────────────────────────────────────
+
+function RedeemDialog({
+  userPrincipal,
+  truncated,
+}: {
+  userPrincipal: import("@icp-sdk/core/principal").Principal;
+  truncated: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const redeemCoins = useRedeemCoins();
+
+  const handleRedeem = async () => {
+    const n = Number.parseInt(amount, 10);
+    if (Number.isNaN(n) || n < 1) {
+      toast.error("Enter a valid coin amount.");
+      return;
+    }
+    try {
+      await redeemCoins.mutateAsync({
+        userPrincipal,
+        amount: BigInt(n),
+      });
+      toast.success(`${n} coins redeemed for ${truncated}.`);
+      setAmount("");
+      setOpen(false);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to redeem coins.");
+    }
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button
+          data-ocid="admin.coins.redeem.open_modal_button"
+          variant="ghost"
+          size="sm"
+          className="text-gold/70 hover:text-gold hover:bg-gold/10 text-xs font-body rounded-sm border border-gold/20"
+        >
+          <CircleDollarSign className="w-3 h-3 mr-1" />
+          Redeem
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent className="bg-card border-gold/25">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="font-display text-cream">
+            Redeem Coins
+          </AlertDialogTitle>
+          <AlertDialogDescription className="font-body text-cream/60">
+            Redeem coins for user{" "}
+            <span className="text-gold font-mono text-xs">{truncated}</span>.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="py-2 space-y-2">
+          <Label className="text-cream/70 font-body text-sm tracking-wide">
+            Amount to Redeem
+          </Label>
+          <Input
+            type="number"
+            min="1"
+            data-ocid="admin.coins.redeem.input"
+            placeholder="e.g. 50"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="bg-card/60 border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body"
+          />
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            data-ocid="admin.coins.redeem.cancel_button"
+            className="btn-gold-outline rounded-sm font-body"
+          >
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            data-ocid="admin.coins.redeem.confirm_button"
+            onClick={handleRedeem}
+            disabled={!amount || redeemCoins.isPending}
+            className="btn-gold rounded-sm font-body"
+          >
+            {redeemCoins.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : null}
+            Redeem
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function ReferCoinsTab() {
+  const { data: referrals, isLoading: referralsLoading } =
+    useAdminGetAllReferrals();
+  const { data: balances, isLoading: balancesLoading } =
+    useAdminGetAllCoinBalances();
+
+  const truncatePrincipal = (
+    p: import("@icp-sdk/core/principal").Principal,
+  ) => {
+    const s = p.toString();
+    if (s.length <= 12) return s;
+    return `${s.slice(0, 6)}…${s.slice(-4)}`;
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Referral Codes Table */}
+      <div className="card-cosmic rounded-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gold/15 flex items-center gap-3">
+          <Gift className="w-4 h-4 text-gold" />
+          <h2 className="font-display text-xl text-cream">
+            All Referral Codes
+            {referrals && (
+              <span className="ml-3 text-sm text-gold/50 font-body">
+                ({referrals.length} total)
+              </span>
+            )}
+          </h2>
+        </div>
+
+        {referralsLoading ? (
+          <div
+            className="flex items-center justify-center py-12"
+            data-ocid="admin.referrals.loading_state"
+          >
+            <Loader2 className="w-6 h-6 text-gold animate-spin" />
+          </div>
+        ) : !referrals || referrals.length === 0 ? (
+          <div
+            className="text-center py-16 text-cream/40 font-body"
+            data-ocid="admin.referrals.empty_state"
+          >
+            <Gift className="w-10 h-10 text-gold/20 mx-auto mb-3" />
+            No referral codes generated yet.
+          </div>
+        ) : (
+          <ScrollArea className="max-h-[400px]">
+            <Table data-ocid="admin.referrals.table">
+              <TableHeader>
+                <TableRow className="border-gold/15 hover:bg-transparent">
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Code
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Owner
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Times Used
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Coins Earned
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Created
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {referrals.map((ref: Referral, idx: number) => (
+                  <TableRow
+                    key={ref.code}
+                    data-ocid={`admin.referral.row.${idx + 1}`}
+                    className="border-gold/10 hover:bg-gold/5"
+                  >
+                    <TableCell className="font-body text-gold font-medium tracking-widest">
+                      {ref.code}
+                    </TableCell>
+                    <TableCell className="font-body text-cream/70 text-sm font-mono">
+                      {truncatePrincipal(ref.owner)}
+                    </TableCell>
+                    <TableCell className="font-body text-cream/80 text-sm">
+                      {Number(ref.timesUsed)}
+                    </TableCell>
+                    <TableCell className="font-body text-gold text-sm font-medium">
+                      {Number(ref.coinsEarned)} ✦
+                    </TableCell>
+                    <TableCell className="font-body text-cream/50 text-sm">
+                      {new Date(
+                        Number(ref.createdAt) / 1_000_000,
+                      ).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        )}
+      </div>
+
+      {/* Coin Balances Table */}
+      <div className="card-cosmic rounded-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gold/15 flex items-center gap-3">
+          <CircleDollarSign className="w-4 h-4 text-gold" />
+          <h2 className="font-display text-xl text-cream">
+            Coin Balances
+            {balances && (
+              <span className="ml-3 text-sm text-gold/50 font-body">
+                ({balances.filter(([, b]) => b > 0n).length} with coins)
+              </span>
+            )}
+          </h2>
+        </div>
+
+        {balancesLoading ? (
+          <div
+            className="flex items-center justify-center py-12"
+            data-ocid="admin.coinbalances.loading_state"
+          >
+            <Loader2 className="w-6 h-6 text-gold animate-spin" />
+          </div>
+        ) : !balances || balances.length === 0 ? (
+          <div
+            className="text-center py-16 text-cream/40 font-body"
+            data-ocid="admin.coinbalances.empty_state"
+          >
+            <CircleDollarSign className="w-10 h-10 text-gold/20 mx-auto mb-3" />
+            No coin balances recorded yet.
+          </div>
+        ) : (
+          <ScrollArea className="max-h-[400px]">
+            <Table data-ocid="admin.coinbalances.table">
+              <TableHeader>
+                <TableRow className="border-gold/15 hover:bg-transparent">
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    User
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Coin Balance
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase text-right">
+                    Action
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {balances.map(([principal, balance], idx) => (
+                  <TableRow
+                    key={principal.toString()}
+                    data-ocid={`admin.coinbalance.row.${idx + 1}`}
+                    className="border-gold/10 hover:bg-gold/5"
+                  >
+                    <TableCell className="font-body text-cream/70 text-sm font-mono">
+                      {truncatePrincipal(principal)}
+                    </TableCell>
+                    <TableCell className="font-body text-gold font-medium">
+                      {Number(balance)} ✦
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {balance > 0n && (
+                        <RedeemDialog
+                          userPrincipal={principal}
+                          truncated={truncatePrincipal(principal)}
+                        />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Admin Reviews Tab ────────────────────────────────────────────
+
+function StarMini({ rating }: { rating: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={`w-3 h-3 ${
+            n <= rating
+              ? "text-gold fill-gold"
+              : "text-cream/20 fill-transparent"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AdminReviewsTab() {
+  const [reviews, setReviews] = useState<LocalReview[]>(() =>
+    loadLocalReviews(),
+  );
+
+  // Refresh from localStorage whenever this component mounts/renders
+  useEffect(() => {
+    setReviews(loadLocalReviews());
+  }, []);
+
+  const handleApprove = (id: string) => {
+    approveLocalReview(id);
+    setReviews(loadLocalReviews());
+    toast.success("Review approved and will appear publicly.");
+  };
+
+  const handleDelete = (id: string) => {
+    deleteLocalReview(id);
+    setReviews(loadLocalReviews());
+    toast.success("Review deleted.");
+  };
+
+  const pending = reviews.filter((r) => !r.approved);
+  const approved = reviews.filter((r) => r.approved);
+
+  return (
+    <div className="space-y-6">
+      {/* Info banner */}
+      <div className="flex items-start gap-3 bg-gold/5 border border-gold/15 rounded-sm px-5 py-4">
+        <MessageSquare className="w-4 h-4 text-gold/60 flex-shrink-0 mt-0.5" />
+        <p className="font-body text-cream/60 text-sm">
+          Reviews are currently stored locally in the browser. Backend
+          persistence coming soon. Only approved reviews are shown on the
+          homepage.
+        </p>
+      </div>
+
+      <div className="card-cosmic rounded-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gold/15 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="w-4 h-4 text-gold" />
+            <h2 className="font-display text-xl text-cream">
+              All Reviews
+              <span className="ml-3 text-sm text-gold/50 font-body">
+                ({reviews.length} total · {pending.length} pending)
+              </span>
+            </h2>
+          </div>
+        </div>
+
+        {reviews.length === 0 ? (
+          <div
+            className="text-center py-16 text-cream/40 font-body"
+            data-ocid="admin.reviews.empty_state"
+          >
+            <MessageSquare className="w-10 h-10 text-gold/20 mx-auto mb-3" />
+            No reviews submitted yet.
+          </div>
+        ) : (
+          <ScrollArea className="max-h-[600px]">
+            <Table data-ocid="admin.reviews.table">
+              <TableHeader>
+                <TableRow className="border-gold/15 hover:bg-transparent">
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Author
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Rating
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Service
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Review
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Date
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase text-right">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reviews.map((review, idx) => (
+                  <TableRow
+                    key={review.id}
+                    data-ocid={`admin.review.row.${idx + 1}`}
+                    className="border-gold/10 hover:bg-gold/5 align-top"
+                  >
+                    <TableCell className="font-body text-cream/90 font-medium whitespace-nowrap">
+                      {review.authorName}
+                    </TableCell>
+                    <TableCell>
+                      <StarMini rating={review.rating} />
+                    </TableCell>
+                    <TableCell className="font-body text-cream/65 text-sm max-w-[100px]">
+                      <span className="line-clamp-2">{review.service}</span>
+                    </TableCell>
+                    <TableCell className="font-body text-cream/60 text-sm max-w-[200px]">
+                      <span className="line-clamp-2 text-xs">
+                        "{review.text}"
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-body text-cream/50 text-sm whitespace-nowrap">
+                      {new Date(review.createdAt).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          review.approved
+                            ? "bg-gold/15 text-gold border border-gold/30 font-body text-xs"
+                            : "bg-muted text-muted-foreground border-0 font-body text-xs"
+                        }
+                      >
+                        {review.approved ? "Approved" : "Pending"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {!review.approved && (
+                          <Button
+                            data-ocid={`admin.review.approve_button.${idx + 1}`}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleApprove(review.id)}
+                            className="text-gold/70 hover:text-gold hover:bg-gold/10 text-xs font-body rounded-sm border border-gold/20"
+                          >
+                            <Check className="w-3 h-3 mr-1" />
+                            Approve
+                          </Button>
+                        )}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              data-ocid={`admin.review.delete_button.${idx + 1}`}
+                              variant="ghost"
+                              size="icon"
+                              className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="bg-card border-gold/25">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="font-display text-cream">
+                                Delete this review?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription className="font-body text-cream/60">
+                                Review by {review.authorName} will be
+                                permanently deleted from local storage.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel
+                                data-ocid={`admin.review.cancel_button.${idx + 1}`}
+                                className="btn-gold-outline rounded-sm font-body"
+                              >
+                                Cancel
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                data-ocid={`admin.review.confirm_button.${idx + 1}`}
+                                onClick={() => handleDelete(review.id)}
+                                className="bg-destructive text-destructive-foreground rounded-sm font-body"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        )}
+      </div>
+
+      {/* Stats summary */}
+      {reviews.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="card-cosmic rounded-sm p-4 text-center">
+            <div className="font-display text-3xl text-gold mb-1">
+              {reviews.length}
+            </div>
+            <div className="font-body text-cream/50 text-xs tracking-wide uppercase">
+              Total Reviews
+            </div>
+          </div>
+          <div className="card-cosmic rounded-sm p-4 text-center">
+            <div className="font-display text-3xl text-gold mb-1">
+              {approved.length}
+            </div>
+            <div className="font-body text-cream/50 text-xs tracking-wide uppercase">
+              Approved
+            </div>
+          </div>
+          <div className="card-cosmic rounded-sm p-4 text-center">
+            <div className="font-display text-3xl text-gold mb-1">
+              {reviews.length > 0
+                ? (
+                    reviews.reduce((sum, r) => sum + r.rating, 0) /
+                    reviews.length
+                  ).toFixed(1)
+                : "—"}
+            </div>
+            <div className="font-body text-cream/50 text-xs tracking-wide uppercase">
+              Avg. Rating
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

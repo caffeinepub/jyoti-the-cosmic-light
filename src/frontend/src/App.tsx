@@ -5,6 +5,7 @@ import { Navbar } from "./components/Navbar";
 import { AdminPage } from "./pages/AdminPage";
 import { BookingPage } from "./pages/BookingPage";
 import { HomePage } from "./pages/HomePage";
+import { ReviewsPage } from "./pages/ReviewsPage";
 
 // Root layout
 const rootRoute = createRootRoute({
@@ -35,7 +36,18 @@ const adminRoute = createRoute({
   component: AdminPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, bookRoute, adminRoute]);
+const reviewsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reviews",
+  component: ReviewsPage,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  bookRoute,
+  adminRoute,
+  reviewsRoute,
+]);
 
 const router = createRouter({ routeTree });
 

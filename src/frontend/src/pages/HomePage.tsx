@@ -1,7 +1,17 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
-import { Compass, Instagram, Mail, Moon, Star, Sun } from "lucide-react";
+import {
+  Compass,
+  Instagram,
+  Mail,
+  MessageSquare,
+  Moon,
+  Star,
+  Sun,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { ZodiacWheel } from "../components/ZodiacWheel";
+import { type LocalReview, loadLocalReviews } from "../utils/reviewsStore";
 
 const INSTAGRAM_POSTS = [
   {
@@ -35,6 +45,202 @@ const INSTAGRAM_POSTS = [
       "The Sun in your chart is where you must become yourself. It asks for nothing less.",
   },
 ];
+
+// ── Seed Reviews ─────────────────────────────────────────────────
+
+interface SeedReview {
+  id: string;
+  authorName: string;
+  rating: number;
+  text: string;
+  service: string;
+  date: string;
+  approved: true;
+}
+
+const SEED_REVIEWS: SeedReview[] = [
+  {
+    id: "seed_1",
+    authorName: "Priya S.",
+    rating: 5,
+    service: "Birth Chart Reading",
+    text: "Minakshi's reading was deeply insightful. She helped me see patterns I had been blind to for years. Her understanding of Vedic astrology is truly profound.",
+    date: "February 2026",
+    approved: true,
+  },
+  {
+    id: "seed_2",
+    authorName: "Arjun M.",
+    rating: 5,
+    service: "Psychological Astrology",
+    text: "I came with a lot of confusion about my career direction. The session brought so much clarity. The way she connected my chart to my inner patterns was remarkable.",
+    date: "January 2026",
+    approved: true,
+  },
+  {
+    id: "seed_3",
+    authorName: "Sneha R.",
+    rating: 5,
+    service: "Life Guidance Session",
+    text: "A calm, reflective space to explore life's questions. Minakshi listens deeply and offers guidance that feels rooted in both wisdom and practicality.",
+    date: "March 2026",
+    approved: true,
+  },
+  {
+    id: "seed_4",
+    authorName: "Karthik V.",
+    rating: 4,
+    service: "Birth Chart Reading",
+    text: "Very thoughtful analysis of my chart. I appreciated the focus on self-understanding rather than predictions. Will definitely book again.",
+    date: "February 2026",
+    approved: true,
+  },
+];
+
+function StarDisplay({ rating }: { rating: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={`w-3.5 h-3.5 flex-shrink-0 ${
+            n <= rating
+              ? "text-gold fill-gold"
+              : "text-cream/20 fill-transparent"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ReviewsSection() {
+  const [localReviews, setLocalReviews] = useState<LocalReview[]>([]);
+
+  useEffect(() => {
+    const approved = loadLocalReviews().filter((r) => r.approved);
+    setLocalReviews(approved);
+  }, []);
+
+  // Combine seed + approved local reviews
+  type DisplayReview = {
+    id: string;
+    authorName: string;
+    rating: number;
+    text: string;
+    service: string;
+    displayDate: string;
+  };
+
+  const reviews: DisplayReview[] = [
+    ...SEED_REVIEWS.map((r) => ({
+      id: r.id,
+      authorName: r.authorName,
+      rating: r.rating,
+      text: r.text,
+      service: r.service,
+      displayDate: r.date,
+    })),
+    ...localReviews.map((r) => ({
+      id: r.id,
+      authorName: r.authorName,
+      rating: r.rating,
+      text: r.text,
+      service: r.service,
+      displayDate: new Date(r.createdAt).toLocaleDateString("en-IN", {
+        month: "long",
+        year: "numeric",
+      }),
+    })),
+  ];
+
+  return (
+    <section
+      id="reviews"
+      className="py-28 px-6"
+      style={{
+        background:
+          "linear-gradient(180deg, oklch(0.14 0.05 272) 0%, oklch(0.11 0.04 265) 100%)",
+      }}
+    >
+      <div className="container mx-auto max-w-5xl">
+        {/* Section header */}
+        <div className="text-center mb-16">
+          <span className="text-gold/60 text-xs tracking-[0.4em] uppercase font-body block mb-4">
+            Testimonials
+          </span>
+          <h2 className="font-display text-4xl sm:text-5xl text-cream mb-6">
+            What Clients Say
+          </h2>
+          <div className="gold-divider w-24 mx-auto mb-8" />
+          <p className="font-body text-lg text-cream/65 max-w-xl mx-auto">
+            Each session opens a doorway. Here is what others have found on the
+            other side.
+          </p>
+        </div>
+
+        {/* Reviews grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-16">
+          {reviews.map((review, idx) => (
+            <div
+              key={review.id}
+              data-ocid={`reviews.item.${idx + 1}`}
+              className="card-cosmic rounded-sm p-7 flex flex-col"
+            >
+              {/* Stars + service */}
+              <div className="flex items-start justify-between mb-4">
+                <StarDisplay rating={review.rating} />
+                <span className="font-body text-gold/50 text-xs tracking-wide border border-gold/15 px-2 py-0.5 rounded-sm">
+                  {review.service}
+                </span>
+              </div>
+
+              {/* Review text */}
+              <p className="font-body text-cream/80 text-base leading-relaxed italic mb-6 flex-1">
+                "{review.text}"
+              </p>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between border-t border-gold/10 pt-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-sm bg-gold/15 border border-gold/25 flex items-center justify-center">
+                    <span className="font-display text-gold text-xs">
+                      {review.authorName.charAt(0)}
+                    </span>
+                  </div>
+                  <span className="font-body text-cream/70 text-sm font-medium">
+                    {review.authorName}
+                  </span>
+                </div>
+                <span className="font-body text-cream/35 text-xs">
+                  {review.displayDate}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA */}
+        <div className="text-center">
+          <div className="inline-flex flex-col items-center gap-5">
+            <p className="font-body text-cream/55 text-base">
+              Had a session with Minakshi? We'd love to hear your story.
+            </p>
+            <Link to="/reviews">
+              <Button
+                data-ocid="reviews.share.primary_button"
+                className="btn-gold px-10 py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2"
+              >
+                <MessageSquare className="w-4 h-4" />
+                Share Your Experience
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 const PURUSHARTHAS = [
   {
@@ -378,6 +584,11 @@ export function HomePage() {
 
       <div className="section-divider" />
 
+      {/* ─── Reviews Section ───────────────────────────────────────── */}
+      <ReviewsSection />
+
+      <div className="section-divider" />
+
       {/* ─── Astrologer Section ────────────────────────────────────── */}
       <section
         id="astrologer"
@@ -609,6 +820,14 @@ export function HomePage() {
               >
                 <Star className="w-4 h-4" />
                 Book Appointment
+              </Link>
+              <Link
+                to="/reviews"
+                className="flex items-center gap-2 text-cream/50 hover:text-gold transition-colors"
+                data-ocid="footer.reviews.link"
+              >
+                <MessageSquare className="w-4 h-4" />
+                Reviews
               </Link>
               <a
                 href="mailto:dujyoti.minnakshi@gmail.com"

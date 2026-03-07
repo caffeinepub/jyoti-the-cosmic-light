@@ -22,7 +22,7 @@ export interface AvailableSlot {
 }
 export type Result_6 = {
     __kind__: "ok";
-    ok: Array<Booking>;
+    ok: Array<Remedy>;
 } | {
     __kind__: "err";
     err: string;
@@ -36,14 +36,47 @@ export interface Coupon {
 }
 export type Result_5 = {
     __kind__: "ok";
-    ok: Array<Remedy>;
+    ok: Array<Coupon>;
 } | {
     __kind__: "err";
     err: string;
 };
+export type Result_9 = {
+    __kind__: "ok";
+    ok: Booking;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type Result_12 = {
+    __kind__: "ok";
+    ok: AvailableSlot;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export interface ServiceFee {
+    serviceName: string;
+    currency: string;
+    amount: bigint;
+}
 export type Result_1 = {
     __kind__: "ok";
     ok: Remedy;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type Result_4 = {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type Result_11 = {
+    __kind__: "ok";
+    ok: Array<[Principal, bigint]>;
 } | {
     __kind__: "err";
     err: string;
@@ -56,18 +89,6 @@ export interface Remedy {
     clientName: string;
     createdAt: bigint;
 }
-export interface ServiceFee {
-    serviceName: string;
-    currency: string;
-    amount: bigint;
-}
-export type Result_4 = {
-    __kind__: "ok";
-    ok: Array<Coupon>;
-} | {
-    __kind__: "err";
-    err: string;
-};
 export type Result = {
     __kind__: "ok";
     ok: Coupon;
@@ -82,16 +103,30 @@ export type Result_3 = {
     __kind__: "err";
     err: string;
 };
-export type Result_8 = {
+export type Result_10 = {
     __kind__: "ok";
-    ok: AvailableSlot;
+    ok: Array<Referral>;
 } | {
     __kind__: "err";
     err: string;
 };
+export type Result_8 = {
+    __kind__: "ok";
+    ok: string;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export interface Referral {
+    owner: Principal;
+    code: string;
+    createdAt: bigint;
+    timesUsed: bigint;
+    coinsEarned: bigint;
+}
 export type Result_7 = {
     __kind__: "ok";
-    ok: Booking;
+    ok: Array<Booking>;
 } | {
     __kind__: "err";
     err: string;
@@ -126,26 +161,33 @@ export enum UserRole {
 }
 export interface backendInterface {
     addRemedy(bookingId: bigint, clientName: string, title: string, content: string): Promise<Result_1>;
-    addSlot(date: string, time: string): Promise<Result_8>;
+    addSlot(date: string, time: string): Promise<Result_12>;
+    adminGetAllCoinBalances(): Promise<Result_11>;
+    adminGetAllReferrals(): Promise<Result_10>;
+    applyReferralCode(code: string): Promise<Result_8>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    bookAppointment(clientName: string, email: string, service: string, slotId: bigint, dob: string, tob: string, birthPlace: string, lat: number, lng: number, gender: string, question: string, couponCode: string | null): Promise<Result_7>;
+    bookAppointment(clientName: string, email: string, service: string, slotId: bigint, dob: string, tob: string, birthPlace: string, lat: number, lng: number, gender: string, question: string, couponCode: string | null): Promise<Result_9>;
     cancelBooking(id: bigint): Promise<Result_2>;
     claimFirstAdmin(): Promise<boolean>;
     createCoupon(code: string, discountPercent: bigint, maxUsage: bigint): Promise<Result>;
     deleteCoupon(code: string): Promise<Result_2>;
     deleteRemedy(id: bigint): Promise<Result_2>;
     forceClaimAdmin(userSecret: string): Promise<boolean>;
-    getAllRemedies(): Promise<Result_5>;
+    generateReferralCode(): Promise<Result_8>;
+    getAllRemedies(): Promise<Result_6>;
     getAvailableSlots(): Promise<Array<AvailableSlot>>;
-    getBookings(): Promise<Result_6>;
+    getBookings(): Promise<Result_7>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
-    getRemediesForBooking(bookingId: bigint): Promise<Result_5>;
+    getCoinBalance(): Promise<bigint>;
+    getReferralCode(): Promise<string | null>;
+    getRemediesForBooking(bookingId: bigint): Promise<Result_6>;
     getServiceFees(): Promise<Array<ServiceFee>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isAdmin(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
-    listCoupons(): Promise<Result_4>;
+    listCoupons(): Promise<Result_5>;
+    redeemCoins(userPrincipal: Principal, amount: bigint): Promise<Result_4>;
     removeServiceFee(serviceName: string): Promise<Result_2>;
     removeSlot(id: bigint): Promise<Result_2>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;

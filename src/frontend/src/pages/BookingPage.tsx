@@ -9,14 +9,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, ChevronRight, Loader2, Tag, X } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Copy,
+  Loader2,
+  Sparkles,
+  Tag,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { AvailableSlot, Booking, Coupon } from "../backend.d";
 import { ZodiacWheel } from "../components/ZodiacWheel";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
+  useApplyReferralCode,
   useAvailableSlots,
   useBookAppointment,
+  useGenerateReferralCode,
+  useGetCoinBalance,
+  useGetReferralCode,
   useServiceFees,
   useValidateCoupon,
 } from "../hooks/useQueries";
@@ -764,6 +779,9 @@ export function BookingPage() {
               />
             )}
 
+            {/* Refer a Friend */}
+            <ReferFriendSection />
+
             <div className="pt-2 flex justify-between">
               <Button
                 variant="ghost"
@@ -851,6 +869,222 @@ function FeeSummary({
           {discountedAmount.toLocaleString("en-IN")}
         </span>
       </div>
+    </div>
+  );
+}
+
+// ── Refer a Friend Section ───────────────────────────────────────
+
+function ReferFriendSection() {
+  const { identity } = useInternetIdentity();
+  const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
+
+  const [expanded, setExpanded] = useState(false);
+  const [referInput, setReferInput] = useState("");
+  const [referSuccess, setReferSuccess] = useState("");
+  const [referError, setReferError] = useState("");
+
+  const { data: referralCode, isLoading: codeLoading } = useGetReferralCode();
+  const { data: coinBalance } = useGetCoinBalance();
+  const generateCode = useGenerateReferralCode();
+  const applyCode = useApplyReferralCode();
+
+  if (!isAuthenticated) return null;
+
+  const handleGenerate = async () => {
+    try {
+      await generateCode.mutateAsync();
+      toast.success("Referral code generated!");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to generate code.");
+    }
+  };
+
+  const handleApply = async () => {
+    if (!referInput.trim()) return;
+    setReferError("");
+    setReferSuccess("");
+    try {
+      await applyCode.mutateAsync(referInput.trim().toUpperCase());
+      setReferSuccess("Code applied! 20 coins added to your balance.");
+      setReferInput("");
+      toast.success("Referral code applied — 20 coins earned!");
+    } catch (e: unknown) {
+      setReferError(e instanceof Error ? e.message : "Invalid referral code.");
+    }
+  };
+
+  const handleCopy = () => {
+    if (referralCode) {
+      navigator.clipboard.writeText(referralCode);
+      toast.success("Referral code copied!");
+    }
+  };
+
+  return (
+    <div className="border border-gold/20 rounded-sm overflow-hidden mt-6">
+      {/* Header toggle */}
+      <button
+        type="button"
+        onClick={() => setExpanded((p) => !p)}
+        data-ocid="booking.refer.toggle"
+        className="w-full flex items-center justify-between px-5 py-4 bg-gold/5 hover:bg-gold/10 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3">
+          <Sparkles className="w-4 h-4 text-gold flex-shrink-0" />
+          <span className="font-body text-cream/80 text-sm tracking-wide">
+            Refer a Friend · Earn Coins
+          </span>
+          {coinBalance !== undefined && coinBalance > 0n && (
+            <span className="text-gold text-xs font-body border border-gold/30 bg-gold/10 px-2 py-0.5 rounded-sm">
+              {Number(coinBalance)} ✦ coins
+            </span>
+          )}
+        </div>
+        {expanded ? (
+          <ChevronUp className="w-4 h-4 text-gold/50" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-gold/50" />
+        )}
+      </button>
+
+      {/* Body */}
+      {expanded && (
+        <div className="px-5 py-5 space-y-6 bg-card/30">
+          {/* How it works */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
+            {[
+              {
+                icon: "✦",
+                title: "Share Your Code",
+                desc: "Earn 50 coins per friend who books",
+              },
+              {
+                icon: "✧",
+                title: "Apply a Code",
+                desc: "Get 20 coins when you enter a friend's code",
+              },
+              {
+                icon: "◈",
+                title: "Redeem Coins",
+                desc: "Coins unlock discounts on future sessions",
+              },
+            ].map(({ icon, title, desc }) => (
+              <div
+                key={title}
+                className="p-3 border border-gold/15 rounded-sm bg-gold/3 space-y-1"
+              >
+                <div className="text-gold text-lg">{icon}</div>
+                <p className="font-body text-cream/80 text-xs font-medium tracking-wide">
+                  {title}
+                </p>
+                <p className="font-body text-cream/45 text-xs">{desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Your referral code */}
+          <div className="space-y-2">
+            <Label className="text-cream/70 font-body text-xs tracking-wider uppercase">
+              Your Referral Code
+            </Label>
+            {codeLoading ? (
+              <div
+                className="flex items-center gap-2 text-cream/40 font-body text-sm"
+                data-ocid="booking.refer.loading_state"
+              >
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Loading…
+              </div>
+            ) : referralCode ? (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-gold/8 border border-gold/30 rounded-sm px-4 py-2.5 font-body text-gold font-medium tracking-[0.2em] text-sm">
+                  {referralCode}
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleCopy}
+                  data-ocid="booking.refer.code.button"
+                  variant="ghost"
+                  size="icon"
+                  className="w-9 h-9 text-gold/60 hover:text-gold hover:bg-gold/10 border border-gold/20 rounded-sm"
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generateCode.isPending}
+                data-ocid="booking.refer.generate.button"
+                className="btn-gold px-5 py-2 tracking-widest uppercase text-xs rounded-none inline-flex items-center gap-2"
+              >
+                {generateCode.isPending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3 h-3" />
+                )}
+                Generate My Code
+              </Button>
+            )}
+          </div>
+
+          {/* Apply referral code */}
+          <div className="space-y-2">
+            <Label className="text-cream/70 font-body text-xs tracking-wider uppercase">
+              Apply a Friend's Code
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                data-ocid="booking.refer.apply.input"
+                placeholder="Enter referral code"
+                value={referInput}
+                onChange={(e) => {
+                  setReferInput(
+                    e.target.value.toUpperCase().replace(/\s/g, ""),
+                  );
+                  setReferError("");
+                  setReferSuccess("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleApply();
+                }}
+                className="bg-card/60 border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body tracking-widest text-sm uppercase"
+              />
+              <Button
+                type="button"
+                onClick={handleApply}
+                disabled={!referInput.trim() || applyCode.isPending}
+                data-ocid="booking.refer.apply.button"
+                className="btn-gold px-4 rounded-none tracking-wider uppercase text-xs whitespace-nowrap"
+              >
+                {applyCode.isPending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  "Apply"
+                )}
+              </Button>
+            </div>
+            {referSuccess && (
+              <p
+                className="font-body text-gold text-xs"
+                data-ocid="booking.refer.success_state"
+              >
+                {referSuccess}
+              </p>
+            )}
+            {referError && (
+              <p
+                className="font-body text-destructive text-xs"
+                data-ocid="booking.refer.error_state"
+              >
+                {referError}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -953,6 +1187,11 @@ function ConfirmationScreen({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Refer a Friend on confirmation screen */}
+        <div className="mb-10 text-left">
+          <ReferFriendSection />
         </div>
 
         <p className="font-body text-cream/45 text-sm mb-8">

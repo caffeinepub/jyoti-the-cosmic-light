@@ -3,6 +3,7 @@ import type {
   AvailableSlot,
   Booking,
   Coupon,
+  Referral,
   Remedy,
   ServiceFee,
 } from "../backend.d";
@@ -408,16 +409,123 @@ export function useClaimFirstAdmin() {
   return useMutation({
     mutationFn: async () => {
       if (!actor) throw new Error("Not connected");
+      // Call the backend claimFirstAdmin — works only when no admin has been assigned yet
       const success = await actor.claimFirstAdmin();
-      if (!success)
-        throw new Error(
-          "Could not claim admin — an admin may already exist, or you are not signed in.",
-        );
       return success;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["isAdmin"] });
-      queryClient.invalidateQueries({ queryKey: ["actor"] });
     },
   });
+}
+
+// ── Refer Coins ───────────────────────────────────────────────────
+
+export function useGenerateReferralCode() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!actor) throw new Error("Not connected");
+      const result = await actor.generateReferralCode();
+      if (result.__kind__ === "err") throw new Error(result.err);
+      return result.ok;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["referralCode"] });
+      queryClient.invalidateQueries({ queryKey: ["coinBalance"] });
+    },
+  });
+}
+
+export function useGetReferralCode() {
+  const { actor, isFetching } = useActor();
+  return useQuery<string | null>({
+    queryKey: ["referralCode"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getReferralCode();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useGetCoinBalance() {
+  const { actor, isFetching } = useActor();
+  return useQuery<bigint>({
+    queryKey: ["coinBalance"],
+    queryFn: async () => {
+      if (!actor) return 0n;
+      return actor.getCoinBalance();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useApplyReferralCode() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (code: string) => {
+      if (!actor) throw new Error("Not connected");
+      const result = await actor.applyReferralCode(code);
+      if (result.__kind__ === "err") throw new Error(result.err);
+      return result.ok;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coinBalance"] });
+    },
+  });
+}
+
+export function useRedeemCoins() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: {
+      userPrincipal: import("@icp-sdk/core/principal").Principal;
+      amount: bigint;
+    }) => {
+      if (!actor) throw new Error("Not connected");
+      const result = await actor.redeemCoins(
+        params.userPrincipal,
+        params.amount,
+      );
+      if (result.__kind__ === "err") throw new Error(result.err);
+      return result.ok;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminCoinBalances"] });
+    },
+  });
+}
+
+export function useAdminGetAllReferrals() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Referral[]>({
+    queryKey: ["adminReferrals"],
+    queryFn: async () => {
+      if (!actor) return [];
+      const result = await actor.adminGetAllReferrals();
+      if (result.__kind__ === "ok") return result.ok;
+      throw new Error(result.err);
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useAdminGetAllCoinBalances() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Array<[import("@icp-sdk/core/principal").Principal, bigint]>>(
+    {
+      queryKey: ["adminCoinBalances"],
+      queryFn: async () => {
+        if (!actor) return [];
+        const result = await actor.adminGetAllCoinBalances();
+        if (result.__kind__ === "ok") return result.ok;
+        throw new Error(result.err);
+      },
+      enabled: !!actor && !isFetching,
+    },
+  );
 }

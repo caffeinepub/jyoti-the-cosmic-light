@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { Menu, Shield, X } from "lucide-react";
+import { Menu, MessageSquare, Shield, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function Navbar() {
@@ -53,6 +53,14 @@ export function Navbar() {
                 {link.label}
               </a>
             ))}
+            <Link
+              to="/reviews"
+              data-ocid="nav.reviews.link"
+              className="font-body text-foreground/75 hover:text-gold transition-colors duration-300 text-base tracking-wide flex items-center gap-1.5"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Reviews
+            </Link>
             <Link to="/book">
               <Button
                 data-ocid="nav.primary_button"
@@ -105,6 +113,15 @@ export function Navbar() {
                 >
                   Book a Reading
                 </Button>
+              </Link>
+              <Link
+                to="/reviews"
+                data-ocid="nav.reviews.link"
+                className="font-body text-foreground/75 hover:text-gold transition-colors duration-300 text-base px-2 flex items-center gap-2"
+                onClick={() => setMobileOpen(false)}
+              >
+                <MessageSquare className="w-4 h-4" />
+                Reviews
               </Link>
               <Link
                 to="/admin"

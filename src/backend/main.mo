@@ -7,9 +7,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
-import Migration "migration";
 
-(with migration = Migration.run)
 actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
@@ -52,6 +50,13 @@ actor {
     content : Text;
     createdAt : Int;
   };
+  public type Referral = {
+    owner : Principal;
+    code : Text;
+    coinsEarned : Nat;
+    timesUsed : Nat;
+    createdAt : Int;
+  };
   type Result<T, E> = { #ok : T; #err : E };
 
   let userProfiles = Map.empty<Principal, UserProfile>();
@@ -60,12 +65,17 @@ actor {
   let serviceFees = Map.empty<Text, ServiceFee>();
   let coupons = Map.empty<Text, Coupon>();
   let remedies = Map.empty<Nat, Remedy>();
+  let referrals = Map.empty<Text, Referral>();
+  let userCoinBalances = Map.empty<Principal, Nat>();
+  let userReferralCode = Map.empty<Principal, Text>();
+  let userAppliedReferral = Map.empty<Principal, Bool>();
 
   var nextSlotId = 1;
   var nextBookingId = 1;
   var nextRemedyId = 1;
   var adminAssigned = false : Bool;
   var firstAdminPrincipal : ?Principal = null;
+  var nextReferralId = 1;
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
@@ -424,8 +434,9 @@ actor {
     if (caller.isAnonymous()) { return false };
     if (adminAssigned) { return false };
 
-    accessControlState.adminAssigned := true;
+    AccessControl.assignRole(accessControlState, caller, caller, #admin);
     adminAssigned := true;
+    firstAdminPrincipal := ?caller;
     true;
   };
 
@@ -438,5 +449,146 @@ actor {
       case (?adminPrincipal) { principal == adminPrincipal };
       case (null) { false };
     };
+  };
+
+  public shared ({ caller }) func generateReferralCode() : async Result<Text, Text> {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Only users can generate referral codes");
+    };
+
+    if (caller.isAnonymous()) {
+      return #err("Anonymous callers cannot generate referral codes");
+    };
+
+    switch (userReferralCode.get(caller)) {
+      case (?existingCode) { #ok(existingCode) };
+      case (null) {
+        let code = caller.toText() # "-" # nextReferralId.toText() # "-" # Time.now().toText();
+        let referral : Referral = {
+          owner = caller;
+          code;
+          coinsEarned = 0;
+          timesUsed = 0;
+          createdAt = Time.now();
+        };
+        referrals.add(code, referral);
+        userReferralCode.add(caller, code);
+        nextReferralId += 1;
+        #ok(code);
+      };
+    };
+  };
+
+  public query ({ caller }) func getReferralCode() : async ?Text {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can access referral codes");
+    };
+    userReferralCode.get(caller);
+  };
+
+  public query ({ caller }) func getCoinBalance() : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can access coin balance");
+    };
+    switch (userCoinBalances.get(caller)) {
+      case (?balance) { balance };
+      case (null) { 0 };
+    };
+  };
+
+  public shared ({ caller }) func applyReferralCode(code : Text) : async Result<Text, Text> {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Only users can apply referral codes");
+    };
+
+    if (caller.isAnonymous()) {
+      return #err("Anonymous callers cannot apply referral codes");
+    };
+
+    switch (userAppliedReferral.get(caller)) {
+      case (?true) { return #err("You have already applied a referral code") };
+      case (_) {};
+    };
+
+    switch (referrals.get(code)) {
+      case (null) { return #err("Referral code not found") };
+      case (?referral) {
+        if (referral.owner == caller) {
+          return #err("Cannot apply your own referral code");
+        };
+
+        switch (userCoinBalances.get(referral.owner)) {
+          case (?balance) {
+            let newBalance = balance + 50;
+            userCoinBalances.add(referral.owner, newBalance);
+          };
+          case (null) {
+            userCoinBalances.add(referral.owner, 50);
+          };
+        };
+
+        switch (userCoinBalances.get(caller)) {
+          case (?balance) {
+            let newBalance = balance + 20;
+            userCoinBalances.add(caller, newBalance);
+          };
+          case (null) {
+            userCoinBalances.add(caller, 20);
+          };
+        };
+
+        userAppliedReferral.add(caller, true);
+        let updatedReferral = {
+          referral with
+          timesUsed = referral.timesUsed + 1;
+          coinsEarned = referral.coinsEarned + 50;
+        };
+        referrals.add(code, updatedReferral);
+
+        #ok("Successfully applied referral code. You have earned 20 coins");
+      };
+    };
+  };
+
+  public shared ({ caller }) func redeemCoins(userPrincipal : Principal, amount : Nat) : async Result<Nat, Text> {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      return #err("Unauthorized: Only admins can redeem coins");
+    };
+
+    switch (userCoinBalances.get(userPrincipal)) {
+      case (null) { return #err("User has no coins") };
+      case (?currentBalance) {
+        if (amount > currentBalance) {
+          return #err("Insufficient coins");
+        };
+        let newBalance = currentBalance - amount;
+        userCoinBalances.add(userPrincipal, newBalance);
+        #ok(newBalance);
+      };
+    };
+  };
+
+  public query ({ caller }) func adminGetAllReferrals() : async Result<[Referral], Text> {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      return #err("Unauthorized: Only admins can access referrals");
+    };
+
+    let referralList = List.empty<Referral>();
+    for ((_, referral) in referrals.entries()) {
+      referralList.add(referral);
+    };
+    #ok(referralList.toArray());
+  };
+
+  public query ({ caller }) func adminGetAllCoinBalances() : async Result<[(Principal, Nat)], Text> {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      return #err("Unauthorized: Only admins can access coin balances");
+    };
+
+    let balancesList = List.empty<(Principal, Nat)>();
+    for ((principal, coins) in userCoinBalances.entries()) {
+      balancesList.add((principal, coins));
+    };
+    #ok(balancesList.toArray());
   };
 };
