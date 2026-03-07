@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ZodiacWheel } from "../components/ZodiacWheel";
-import { useServiceFees } from "../hooks/useQueries";
+
 import { type LocalReview, loadLocalReviews } from "../utils/reviewsStore";
 
 const INSTAGRAM_POSTS = [
@@ -273,8 +273,6 @@ const PURUSHARTHAS = [
 const SERVICES = [
   {
     title: "Birth Chart Reading",
-    duration: "45–60 min",
-    price: "₹1,500",
     desc: "A deep exploration of your natal chart — your personality, core strengths, emotional tendencies, karmic patterns, and the overall direction of your life as written in the sky at your birth.",
     highlights: [
       "Personality & soul nature",
@@ -285,8 +283,6 @@ const SERVICES = [
   },
   {
     title: "Life Guidance Session",
-    duration: "45–60 min",
-    price: "₹2,000",
     desc: "A focused consultation on a specific life area — career transitions, relationship dynamics, important decisions. Bring your question; the chart will speak.",
     highlights: [
       "Career & purpose alignment",
@@ -297,8 +293,6 @@ const SERVICES = [
   },
   {
     title: "Psychological Astrology",
-    duration: "45–60 min",
-    price: "₹2,500",
     desc: "An introspective session exploring the recurring patterns of the mind and behavior encoded in your birth chart — a bridge between classical Jyotiṣa and the inner landscape.",
     highlights: [
       "Behavioral & mental patterns",
@@ -309,26 +303,7 @@ const SERVICES = [
   },
 ];
 
-const DEFAULT_FEES: Record<string, number> = {
-  "Birth Chart Reading": 1500,
-  "Life Guidance Session": 2000,
-  "Psychological Astrology": 2500,
-};
-
 export function HomePage() {
-  const { data: serviceFees } = useServiceFees();
-
-  const getDisplayPrice = (title: string) => {
-    if (serviceFees) {
-      const fee = serviceFees.find((f) => f.serviceName === title);
-      if (fee) {
-        const symbol = fee.currency === "INR" ? "₹" : fee.currency;
-        return `${symbol}${Number(fee.amount).toLocaleString("en-IN")}`;
-      }
-    }
-    return `₹${(DEFAULT_FEES[title] ?? 0).toLocaleString("en-IN")}`;
-  };
-
   return (
     <main className="relative overflow-hidden">
       {/* ─── Hero Section ──────────────────────────────────────────── */}
@@ -548,18 +523,10 @@ export function HomePage() {
                 className="card-cosmic rounded-sm p-8 flex flex-col transition-all duration-300 group"
               >
                 <div className="mb-auto">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center mb-4">
                     <span className="text-gold/40 font-display text-4xl leading-none">
                       0{i + 1}
                     </span>
-                    <div className="text-right">
-                      <div className="text-gold font-display text-xl leading-none">
-                        {getDisplayPrice(service.title)}
-                      </div>
-                      <div className="text-gold/50 text-xs tracking-widest font-body mt-1">
-                        {service.duration}
-                      </div>
-                    </div>
                   </div>
                   <h3 className="font-display text-2xl text-cream mb-4 group-hover:text-gold transition-colors">
                     {service.title}

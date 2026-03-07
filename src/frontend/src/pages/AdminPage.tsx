@@ -237,49 +237,174 @@ function AdminUnauthorized() {
   const { clear } = useInternetIdentity();
   const claimFirstAdmin = useClaimFirstAdmin();
   const queryClient = useQueryClient();
+  const [step, setStep] = useState<"initial" | "token-entry" | "instructions">(
+    "initial",
+  );
+  const [adminToken, setAdminToken] = useState("");
   const [claimError, setClaimError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // adminAlreadyClaimed = true when claim was attempted but admin already exists
-  const adminAlreadyClaimed =
-    claimError !== null &&
-    (claimError.toLowerCase().includes("already") ||
-      claimError.toLowerCase().includes("already been claimed"));
-
-  const handleClaim = async () => {
-    setClaimError(null);
-    try {
-      const success = await claimFirstAdmin.mutateAsync();
-      if (success) {
-        window.location.reload();
-      } else {
-        setClaimError(
-          "Admin access has already been claimed. If you are Minakshi, you may be signed in with a different Internet Identity than the one originally used.",
-        );
+  // First try a simple claimFirstAdmin on mount (works if no admin has been set yet)
+  const claimMutateAsync = claimFirstAdmin.mutateAsync;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once on mount
+  useEffect(() => {
+    let cancelled = false;
+    const trySimpleClaim = async () => {
+      try {
+        const success = await claimMutateAsync();
+        if (!cancelled && success) {
+          window.location.reload();
+        } else if (!cancelled) {
+          // Admin already claimed — show token entry
+          setStep("token-entry");
+        }
+      } catch {
+        if (!cancelled) setStep("token-entry");
       }
-    } catch {
-      setClaimError(
-        "Admin access has already been claimed. If you are Minakshi, you may be signed in with a different Internet Identity than the one originally used.",
-      );
-    }
-  };
+    };
+    trySimpleClaim();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await queryClient.invalidateQueries({ queryKey: ["isAdmin"] });
-    setTimeout(() => setIsRefreshing(false), 1500);
+    await queryClient.invalidateQueries({ queryKey: ["actor"] });
+    setTimeout(() => {
+      setIsRefreshing(false);
+      window.location.reload();
+    }, 1500);
   };
 
-  const handleSignOut = () => {
-    try {
-      sessionStorage.removeItem("caffeineAdminToken");
-    } catch {}
+  const handleSignOutAndRetry = () => {
+    // Save the token to sessionStorage so useActor picks it up after re-login
+    if (adminToken.trim()) {
+      try {
+        sessionStorage.setItem("caffeineAdminToken", adminToken.trim());
+      } catch {}
+    }
     clear();
     setTimeout(() => {
       window.location.href = window.location.pathname;
     }, 400);
   };
 
+  const handleTokenSubmit = () => {
+    if (!adminToken.trim()) return;
+    // Save token then sign out — on next login, useActor will call
+    // _initializeAccessControlWithSecret(token) which grants admin
+    // if this identity is not yet registered in the backend.
+    // Show instructions first.
+    try {
+      sessionStorage.setItem("caffeineAdminToken", adminToken.trim());
+    } catch {}
+    setStep("instructions");
+  };
+
+  if (step === "initial") {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center pt-24 px-6"
+        style={{ background: "oklch(0.09 0.025 260)" }}
+        data-ocid="admin.loading_state"
+      >
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-gold animate-spin mx-auto mb-4" />
+          <p className="font-body text-cream/50 text-sm">Verifying access…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "instructions") {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center pt-24 px-6"
+        style={{ background: "oklch(0.09 0.025 260)" }}
+        data-ocid="admin.error_state"
+      >
+        <div className="text-center max-w-md w-full">
+          <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
+            <Shield className="w-8 h-8 text-gold" />
+          </div>
+          <h1 className="font-display text-3xl text-cream mb-3">
+            Almost There
+          </h1>
+          <div className="gold-divider w-20 mx-auto mb-6" />
+
+          <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left space-y-4 mb-6">
+            <p className="font-body text-cream/80 text-sm font-medium">
+              Follow these steps:
+            </p>
+            <ol className="space-y-3">
+              <li className="flex gap-3">
+                <span className="text-gold font-display text-lg leading-none mt-0.5">
+                  1.
+                </span>
+                <p className="font-body text-cream/70 text-sm leading-relaxed">
+                  Click <strong className="text-cream">"Sign Out"</strong> below
+                  to clear your current session.
+                </p>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-gold font-display text-lg leading-none mt-0.5">
+                  2.
+                </span>
+                <p className="font-body text-cream/70 text-sm leading-relaxed">
+                  When the login screen appears, click{" "}
+                  <strong className="text-cream">
+                    "Sign In with Internet Identity"
+                  </strong>
+                  .
+                </p>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-gold font-display text-lg leading-none mt-0.5">
+                  3.
+                </span>
+                <p className="font-body text-cream/70 text-sm leading-relaxed">
+                  In the Internet Identity popup, click{" "}
+                  <strong className="text-gold">"Create New"</strong> to create
+                  a fresh identity (this is required — your previous identity is
+                  registered as a regular user and cannot be upgraded).
+                </p>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-gold font-display text-lg leading-none mt-0.5">
+                  4.
+                </span>
+                <p className="font-body text-cream/70 text-sm leading-relaxed">
+                  Complete the fingerprint/face ID setup for the new identity,
+                  then return to the admin panel. You will be granted admin
+                  access automatically.
+                </p>
+              </li>
+            </ol>
+          </div>
+
+          <Button
+            onClick={handleSignOutAndRetry}
+            data-ocid="admin.signout.primary_button"
+            className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2 mb-3"
+          >
+            Sign Out &amp; Start Fresh
+          </Button>
+          <Button
+            onClick={() => setStep("token-entry")}
+            variant="ghost"
+            data-ocid="admin.back.secondary_button"
+            className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/40 hover:text-cream hover:bg-cream/5"
+          >
+            Back
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // step === "token-entry"
   return (
     <div
       className="min-h-screen flex items-center justify-center pt-24 px-6"
@@ -293,124 +418,68 @@ function AdminUnauthorized() {
         <h1 className="font-display text-3xl text-cream mb-3">Admin Access</h1>
         <div className="gold-divider w-20 mx-auto mb-6" />
 
-        {adminAlreadyClaimed ? (
-          /* Admin already exists — show the "wrong identity" explanation */
-          <div className="space-y-6">
-            <div
-              className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left space-y-3"
-              data-ocid="admin.claim.error_state"
-            >
-              <p className="font-body text-cream/80 text-sm leading-relaxed">
-                Admin access for this site is already set up.
-              </p>
-              <p className="font-body text-cream/65 text-sm leading-relaxed">
-                If you are Minakshi, you may be signed in with a{" "}
-                <span className="text-gold">different Internet Identity</span>{" "}
-                than the one originally used to claim admin.
-              </p>
-              <p className="font-body text-cream/65 text-sm leading-relaxed">
-                Please sign out and sign back in with the{" "}
-                <span className="text-gold font-medium">
-                  same Internet Identity
-                </span>{" "}
-                (fingerprint/device) you used the very first time you accessed
-                this admin panel.
-              </p>
-            </div>
+        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left space-y-2 mb-6">
+          <p className="font-body text-cream/80 text-sm leading-relaxed">
+            Your identity is not registered as admin. To gain access, enter the
+            admin token from your Caffeine dashboard below.
+          </p>
+          <p className="font-body text-cream/50 text-xs leading-relaxed">
+            The token is shown in your Caffeine project settings. It looks like
+            a long string of letters and numbers.
+          </p>
+        </div>
 
-            <Button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              data-ocid="admin.refresh.button"
-              variant="ghost"
-              className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-gold/70 hover:text-gold hover:bg-gold/5 border border-gold/20 inline-flex items-center justify-center gap-2 mb-2"
-            >
-              {isRefreshing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Checking…
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4" />
-                  Re-check Admin Status
-                </>
-              )}
-            </Button>
-
-            <Button
-              onClick={handleSignOut}
-              variant="ghost"
-              data-ocid="admin.signout.secondary_button"
-              className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/50 hover:text-cream hover:bg-cream/5"
-            >
-              Sign Out &amp; Use Different Identity
-            </Button>
-          </div>
-        ) : (
-          /* First visit — offer to claim */
-          <div className="space-y-4">
-            <p className="font-body text-cream/60 mb-2">
-              If you are Minakshi, click below to claim admin access. This only
-              works once — the first person to claim becomes the permanent
-              admin.
-            </p>
-
-            {claimError && (
-              <div
-                className="bg-destructive/10 border border-destructive/30 rounded-sm p-4 text-destructive text-sm font-body text-left"
-                data-ocid="admin.claim.error_state"
-              >
-                {claimError}
-              </div>
-            )}
-
-            <Button
-              onClick={handleClaim}
-              disabled={claimFirstAdmin.isPending}
-              data-ocid="admin.claim.primary_button"
-              className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
-            >
-              {claimFirstAdmin.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Claiming…
-                </>
-              ) : (
-                "Claim Admin Access"
-              )}
-            </Button>
-
-            <Button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              data-ocid="admin.refresh.button"
-              variant="ghost"
-              className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-gold/70 hover:text-gold hover:bg-gold/5 border border-gold/20 inline-flex items-center justify-center gap-2"
-            >
-              {isRefreshing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Checking…
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4" />
-                  Re-check Admin Status
-                </>
-              )}
-            </Button>
-
-            <Button
-              onClick={handleSignOut}
-              variant="ghost"
-              data-ocid="admin.signout.secondary_button"
-              className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/50 hover:text-cream hover:bg-cream/5"
-            >
-              Sign Out
-            </Button>
+        {claimError && (
+          <div
+            className="bg-destructive/10 border border-destructive/30 rounded-sm p-4 text-destructive text-sm font-body text-left mb-4"
+            data-ocid="admin.claim.error_state"
+          >
+            {claimError}
           </div>
         )}
+
+        <div className="space-y-3 mb-6">
+          <input
+            type="text"
+            data-ocid="admin.token.input"
+            placeholder="Paste your admin token here…"
+            value={adminToken}
+            onChange={(e) => {
+              setAdminToken(e.target.value);
+              setClaimError(null);
+            }}
+            className="w-full px-4 py-3 bg-card/60 border border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body text-sm outline-none focus:ring-1 focus:ring-gold/30"
+          />
+        </div>
+
+        <Button
+          onClick={handleTokenSubmit}
+          disabled={!adminToken.trim()}
+          data-ocid="admin.token.primary_button"
+          className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2 mb-3"
+        >
+          Continue
+        </Button>
+
+        <Button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          data-ocid="admin.refresh.button"
+          variant="ghost"
+          className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-gold/70 hover:text-gold hover:bg-gold/5 border border-gold/20 inline-flex items-center justify-center gap-2"
+        >
+          {isRefreshing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Checking…
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-4 h-4" />
+              I'm already admin — Re-check
+            </>
+          )}
+        </Button>
       </div>
     </div>
   );

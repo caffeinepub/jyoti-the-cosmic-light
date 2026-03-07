@@ -1412,32 +1412,105 @@ function ConfirmationScreen({
           <ReferFriendSection />
         </div>
 
-        {/* Screenshot instruction — most important next step */}
+        {/* Payment + Screenshot Section */}
         <div
-          className="card-cosmic rounded-sm p-6 mb-8 border border-gold/30 text-left"
+          className="card-cosmic rounded-sm p-6 mb-8 border border-gold/30 text-left space-y-6"
           data-ocid="booking.screenshot.panel"
         >
+          {/* Payment via UPI */}
+          <div>
+            <h3 className="font-display text-lg text-gold mb-1">
+              Complete Your Payment
+            </h3>
+            <p className="font-body text-cream/60 text-sm mb-4">
+              Scan the QR code below or pay directly via UPI to confirm your
+              session.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-6">
+              {/* QR Code */}
+              <div className="flex-shrink-0 bg-white rounded-sm p-2 shadow-lg">
+                <img
+                  src="/assets/generated/upi-qr-code.dim_300x350.png"
+                  alt="UPI QR Code for iamminakshi007@oksbi"
+                  className="w-40 h-auto block"
+                  data-ocid="booking.upi.qr_image"
+                />
+              </div>
+              {/* UPI Details */}
+              <div className="space-y-3 flex-1 text-center sm:text-left">
+                <div>
+                  <p className="font-body text-cream/50 text-xs tracking-wider uppercase mb-1">
+                    UPI ID
+                  </p>
+                  <div className="flex items-center gap-2 justify-center sm:justify-start">
+                    <span className="font-body text-gold font-medium text-base tracking-wide">
+                      iamminakshi007@oksbi
+                    </span>
+                    <button
+                      type="button"
+                      data-ocid="booking.upi.copy_button"
+                      onClick={() => {
+                        navigator.clipboard.writeText("iamminakshi007@oksbi");
+                        toast.success("UPI ID copied!");
+                      }}
+                      className="text-cream/40 hover:text-gold transition-colors p-1"
+                      aria-label="Copy UPI ID"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <p className="font-body text-cream/50 text-xs tracking-wider uppercase mb-1">
+                    Pay To
+                  </p>
+                  <p className="font-body text-cream/80 text-sm">
+                    Minakshi (दूjyoti)
+                  </p>
+                </div>
+                {booking.feeApplied > 0n && (
+                  <div>
+                    <p className="font-body text-cream/50 text-xs tracking-wider uppercase mb-1">
+                      Amount
+                    </p>
+                    <p className="font-display text-gold text-xl font-medium">
+                      ₹{Number(booking.feeApplied).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                )}
+                <p className="font-body text-cream/40 text-xs leading-relaxed">
+                  Open any UPI app (GPay, PhonePe, Paytm, BHIM) and scan the QR
+                  or enter the UPI ID above.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-gold/15" />
+
+          {/* Screenshot instruction */}
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 border border-gold/40 rounded-sm flex items-center justify-center flex-shrink-0 bg-gold/5">
               <Camera className="w-5 h-5 text-gold" />
             </div>
             <div>
               <h3 className="font-display text-lg text-gold mb-2">
-                Next Step — Send Your Screenshot
+                After Payment — Send Your Screenshot
               </h3>
               <p className="font-body text-cream/70 text-sm leading-relaxed mb-3">
-                Please take a screenshot of this confirmation page and send it
-                to Minakshi at:
+                Once payment is done, take a screenshot of this page (or your
+                payment confirmation) and send it to Minakshi at:
               </p>
               <a
-                href="mailto:dujyoti.minnakshi@gmail.com"
+                href="mailto:dujyoti.minakshi@gmail.com"
                 className="font-body text-gold font-medium text-sm hover:underline"
               >
-                dujyoti.minnakshi@gmail.com
+                dujyoti.minakshi@gmail.com
               </a>
               <p className="font-body text-cream/50 text-xs mt-2">
-                This helps Minakshi prepare for your session and confirm your
-                appointment.
+                This confirms your payment and helps Minakshi prepare for your
+                session.
               </p>
             </div>
           </div>
