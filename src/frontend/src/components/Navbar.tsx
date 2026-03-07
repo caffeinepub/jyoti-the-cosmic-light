@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { Menu, X } from "lucide-react";
+import { Menu, Shield, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function Navbar() {
@@ -61,6 +61,15 @@ export function Navbar() {
                 Book a Reading
               </Button>
             </Link>
+            <Link
+              to="/admin"
+              data-ocid="nav.admin.link"
+              className="font-body text-foreground/50 hover:text-gold transition-colors duration-300 text-sm tracking-wide flex items-center gap-1.5"
+              title="Admin Panel"
+            >
+              <Shield className="w-4 h-4" />
+              Admin
+            </Link>
           </div>
 
           {/* Mobile Menu Toggle */}
@@ -96,6 +105,15 @@ export function Navbar() {
                 >
                   Book a Reading
                 </Button>
+              </Link>
+              <Link
+                to="/admin"
+                data-ocid="nav.admin.link"
+                className="font-body text-foreground/50 hover:text-gold transition-colors duration-300 text-base px-2 flex items-center gap-2"
+                onClick={() => setMobileOpen(false)}
+              >
+                <Shield className="w-4 h-4" />
+                Admin
               </Link>
             </div>
           </div>

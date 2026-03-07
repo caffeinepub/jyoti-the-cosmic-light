@@ -8,13 +8,22 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
+export const Remedy = IDL.Record({
+  'id' : IDL.Nat,
+  'title' : IDL.Text,
+  'content' : IDL.Text,
+  'bookingId' : IDL.Nat,
+  'clientName' : IDL.Text,
+  'createdAt' : IDL.Int,
+});
+export const Result_1 = IDL.Variant({ 'ok' : Remedy, 'err' : IDL.Text });
 export const AvailableSlot = IDL.Record({
   'id' : IDL.Nat,
   'date' : IDL.Text,
   'time' : IDL.Text,
   'isBooked' : IDL.Bool,
 });
-export const Result_3 = IDL.Variant({ 'ok' : AvailableSlot, 'err' : IDL.Text });
+export const Result_8 = IDL.Variant({ 'ok' : AvailableSlot, 'err' : IDL.Text });
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
@@ -28,26 +37,56 @@ export const Booking = IDL.Record({
   'tob' : IDL.Text,
   'service' : IDL.Text,
   'status' : IDL.Text,
+  'couponUsed' : IDL.Text,
   'question' : IDL.Text,
   'clientName' : IDL.Text,
   'createdAt' : IDL.Int,
   'birthPlace' : IDL.Text,
   'email' : IDL.Text,
   'slotId' : IDL.Nat,
+  'feeApplied' : IDL.Nat,
   'slotDate' : IDL.Text,
   'gender' : IDL.Text,
   'slotTime' : IDL.Text,
 });
-export const Result_2 = IDL.Variant({ 'ok' : Booking, 'err' : IDL.Text });
-export const Result = IDL.Variant({ 'ok' : IDL.Bool, 'err' : IDL.Text });
-export const Result_1 = IDL.Variant({
+export const Result_7 = IDL.Variant({ 'ok' : Booking, 'err' : IDL.Text });
+export const Result_2 = IDL.Variant({ 'ok' : IDL.Bool, 'err' : IDL.Text });
+export const Coupon = IDL.Record({
+  'active' : IDL.Bool,
+  'code' : IDL.Text,
+  'usageCount' : IDL.Nat,
+  'maxUsage' : IDL.Nat,
+  'discountPercent' : IDL.Nat,
+});
+export const Result = IDL.Variant({ 'ok' : Coupon, 'err' : IDL.Text });
+export const Result_5 = IDL.Variant({
+  'ok' : IDL.Vec(Remedy),
+  'err' : IDL.Text,
+});
+export const Result_6 = IDL.Variant({
   'ok' : IDL.Vec(Booking),
   'err' : IDL.Text,
 });
+export const UserProfile = IDL.Record({ 'name' : IDL.Text });
+export const ServiceFee = IDL.Record({
+  'serviceName' : IDL.Text,
+  'currency' : IDL.Text,
+  'amount' : IDL.Nat,
+});
+export const Result_4 = IDL.Variant({
+  'ok' : IDL.Vec(Coupon),
+  'err' : IDL.Text,
+});
+export const Result_3 = IDL.Variant({ 'ok' : ServiceFee, 'err' : IDL.Text });
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
-  'addSlot' : IDL.Func([IDL.Text, IDL.Text], [Result_3], []),
+  'addRemedy' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+      [Result_1],
+      [],
+    ),
+  'addSlot' : IDL.Func([IDL.Text, IDL.Text], [Result_8], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'bookAppointment' : IDL.Func(
       [
@@ -62,29 +101,60 @@ export const idlService = IDL.Service({
         IDL.Float64,
         IDL.Text,
         IDL.Text,
+        IDL.Opt(IDL.Text),
       ],
-      [Result_2],
+      [Result_7],
       [],
     ),
-  'cancelBooking' : IDL.Func([IDL.Nat], [Result], []),
+  'cancelBooking' : IDL.Func([IDL.Nat], [Result_2], []),
+  'claimFirstAdmin' : IDL.Func([], [IDL.Bool], []),
+  'createCoupon' : IDL.Func([IDL.Text, IDL.Nat, IDL.Nat], [Result], []),
+  'deleteCoupon' : IDL.Func([IDL.Text], [Result_2], []),
+  'deleteRemedy' : IDL.Func([IDL.Nat], [Result_2], []),
+  'forceClaimAdmin' : IDL.Func([IDL.Text], [IDL.Bool], []),
+  'getAllRemedies' : IDL.Func([], [Result_5], ['query']),
   'getAvailableSlots' : IDL.Func([], [IDL.Vec(AvailableSlot)], ['query']),
-  'getBookings' : IDL.Func([], [Result_1], ['query']),
+  'getBookings' : IDL.Func([], [Result_6], ['query']),
+  'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getRemediesForBooking' : IDL.Func([IDL.Nat], [Result_5], ['query']),
+  'getServiceFees' : IDL.Func([], [IDL.Vec(ServiceFee)], ['query']),
+  'getUserProfile' : IDL.Func(
+      [IDL.Principal],
+      [IDL.Opt(UserProfile)],
+      ['query'],
+    ),
   'isAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-  'removeSlot' : IDL.Func([IDL.Nat], [Result], []),
+  'listCoupons' : IDL.Func([], [Result_4], ['query']),
+  'removeServiceFee' : IDL.Func([IDL.Text], [Result_2], []),
+  'removeSlot' : IDL.Func([IDL.Nat], [Result_2], []),
+  'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'setServiceFee' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [Result_3], []),
+  'toggleCouponStatus' : IDL.Func([IDL.Text, IDL.Bool], [Result_2], []),
+  'updateRemedy' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [Result_1], []),
+  'validateCoupon' : IDL.Func([IDL.Text], [Result], ['query']),
 });
 
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
+  const Remedy = IDL.Record({
+    'id' : IDL.Nat,
+    'title' : IDL.Text,
+    'content' : IDL.Text,
+    'bookingId' : IDL.Nat,
+    'clientName' : IDL.Text,
+    'createdAt' : IDL.Int,
+  });
+  const Result_1 = IDL.Variant({ 'ok' : Remedy, 'err' : IDL.Text });
   const AvailableSlot = IDL.Record({
     'id' : IDL.Nat,
     'date' : IDL.Text,
     'time' : IDL.Text,
     'isBooked' : IDL.Bool,
   });
-  const Result_3 = IDL.Variant({ 'ok' : AvailableSlot, 'err' : IDL.Text });
+  const Result_8 = IDL.Variant({ 'ok' : AvailableSlot, 'err' : IDL.Text });
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
@@ -98,23 +168,47 @@ export const idlFactory = ({ IDL }) => {
     'tob' : IDL.Text,
     'service' : IDL.Text,
     'status' : IDL.Text,
+    'couponUsed' : IDL.Text,
     'question' : IDL.Text,
     'clientName' : IDL.Text,
     'createdAt' : IDL.Int,
     'birthPlace' : IDL.Text,
     'email' : IDL.Text,
     'slotId' : IDL.Nat,
+    'feeApplied' : IDL.Nat,
     'slotDate' : IDL.Text,
     'gender' : IDL.Text,
     'slotTime' : IDL.Text,
   });
-  const Result_2 = IDL.Variant({ 'ok' : Booking, 'err' : IDL.Text });
-  const Result = IDL.Variant({ 'ok' : IDL.Bool, 'err' : IDL.Text });
-  const Result_1 = IDL.Variant({ 'ok' : IDL.Vec(Booking), 'err' : IDL.Text });
+  const Result_7 = IDL.Variant({ 'ok' : Booking, 'err' : IDL.Text });
+  const Result_2 = IDL.Variant({ 'ok' : IDL.Bool, 'err' : IDL.Text });
+  const Coupon = IDL.Record({
+    'active' : IDL.Bool,
+    'code' : IDL.Text,
+    'usageCount' : IDL.Nat,
+    'maxUsage' : IDL.Nat,
+    'discountPercent' : IDL.Nat,
+  });
+  const Result = IDL.Variant({ 'ok' : Coupon, 'err' : IDL.Text });
+  const Result_5 = IDL.Variant({ 'ok' : IDL.Vec(Remedy), 'err' : IDL.Text });
+  const Result_6 = IDL.Variant({ 'ok' : IDL.Vec(Booking), 'err' : IDL.Text });
+  const UserProfile = IDL.Record({ 'name' : IDL.Text });
+  const ServiceFee = IDL.Record({
+    'serviceName' : IDL.Text,
+    'currency' : IDL.Text,
+    'amount' : IDL.Nat,
+  });
+  const Result_4 = IDL.Variant({ 'ok' : IDL.Vec(Coupon), 'err' : IDL.Text });
+  const Result_3 = IDL.Variant({ 'ok' : ServiceFee, 'err' : IDL.Text });
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
-    'addSlot' : IDL.Func([IDL.Text, IDL.Text], [Result_3], []),
+    'addRemedy' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+        [Result_1],
+        [],
+      ),
+    'addSlot' : IDL.Func([IDL.Text, IDL.Text], [Result_8], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'bookAppointment' : IDL.Func(
         [
@@ -129,17 +223,39 @@ export const idlFactory = ({ IDL }) => {
           IDL.Float64,
           IDL.Text,
           IDL.Text,
+          IDL.Opt(IDL.Text),
         ],
-        [Result_2],
+        [Result_7],
         [],
       ),
-    'cancelBooking' : IDL.Func([IDL.Nat], [Result], []),
+    'cancelBooking' : IDL.Func([IDL.Nat], [Result_2], []),
+    'claimFirstAdmin' : IDL.Func([], [IDL.Bool], []),
+    'createCoupon' : IDL.Func([IDL.Text, IDL.Nat, IDL.Nat], [Result], []),
+    'deleteCoupon' : IDL.Func([IDL.Text], [Result_2], []),
+    'deleteRemedy' : IDL.Func([IDL.Nat], [Result_2], []),
+    'forceClaimAdmin' : IDL.Func([IDL.Text], [IDL.Bool], []),
+    'getAllRemedies' : IDL.Func([], [Result_5], ['query']),
     'getAvailableSlots' : IDL.Func([], [IDL.Vec(AvailableSlot)], ['query']),
-    'getBookings' : IDL.Func([], [Result_1], ['query']),
+    'getBookings' : IDL.Func([], [Result_6], ['query']),
+    'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getRemediesForBooking' : IDL.Func([IDL.Nat], [Result_5], ['query']),
+    'getServiceFees' : IDL.Func([], [IDL.Vec(ServiceFee)], ['query']),
+    'getUserProfile' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Opt(UserProfile)],
+        ['query'],
+      ),
     'isAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-    'removeSlot' : IDL.Func([IDL.Nat], [Result], []),
+    'listCoupons' : IDL.Func([], [Result_4], ['query']),
+    'removeServiceFee' : IDL.Func([IDL.Text], [Result_2], []),
+    'removeSlot' : IDL.Func([IDL.Nat], [Result_2], []),
+    'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'setServiceFee' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [Result_3], []),
+    'toggleCouponStatus' : IDL.Func([IDL.Text, IDL.Bool], [Result_2], []),
+    'updateRemedy' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [Result_1], []),
+    'validateCoupon' : IDL.Func([IDL.Text], [Result], ['query']),
   });
 };
 

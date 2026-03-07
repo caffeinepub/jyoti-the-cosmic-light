@@ -1,58 +1,19 @@
 # दूjyoti — The Cosmic Light
 
 ## Current State
-New project. No existing code.
+Full spiritual astrology website with homepage, booking system, admin panel with availability, bookings, fees, coupons, and remedies tabs. Admin authentication uses Internet Identity + a `claimFirstAdmin` backend function. The bug: `claimFirstAdmin` stores the caller principal in a separate variable but never registers it in the `AccessControl` module's `userRoles` map. As a result, after claiming admin, all admin-guarded actions fail with "Unauthorized: Only admins can do this."
 
 ## Requested Changes (Diff)
 
 ### Add
-- Full homepage with: Hero, About, Philosophy (Purusharthas), Services, Instagram placeholder, Astrologer bio, Closing quote/CTA, Footer
-- Appointment booking system: clients select service, date/time from admin-set slots, enter name, date of birth, time of birth, birth place (with lat/long lookup), gender, and question
-- On-screen booking confirmation after submission
-- Admin panel (login-protected) with:
-  - Availability management: set available days and time slots
-  - Appointment dashboard: view all bookings with full client birth details
-  - Cancel/manage individual bookings
-- Authorization (admin login)
+- Nothing new
 
 ### Modify
-- N/A (new project)
+- `claimFirstAdmin` backend function: must directly register the caller as `#admin` in `accessControlState.userRoles` and set `accessControlState.adminAssigned = true`, so that `AccessControl.isAdmin()` returns `true` for that caller on all subsequent calls.
 
 ### Remove
-- N/A (new project)
+- The redundant `firstAdminPrincipal` and `adminAssigned` local variables (or keep them but ensure the AccessControl state is the source of truth for all permission checks)
 
 ## Implementation Plan
-
-### Backend (Motoko)
-1. Data types: Booking (id, clientName, email, service, dateTime, dob, tob, birthPlace, lat, lng, gender, question, status), AvailableSlot (id, date, time, isBooked)
-2. Admin identity stored; only admin can manage slots and view all bookings
-3. Functions:
-   - `getAvailableSlots()` — public, returns open slots
-   - `bookAppointment(details)` — public, creates booking and marks slot as booked
-   - `getBookings()` — admin only, returns all bookings
-   - `addSlot(date, time)` — admin only
-   - `removeSlot(id)` — admin only
-   - `cancelBooking(id)` — admin only
-   - `isAdmin()` — checks if caller is admin
-
-### Frontend
-1. Public website:
-   - Navbar with logo and Book a Reading CTA
-   - Hero section: title, subtitle, intro, Book a Reading button
-   - About section: Vedic astrology philosophy
-   - Philosophy section: four Purusharthas
-   - Services section: 3 cards with Book Session buttons
-   - Astrologer bio: Minakshi
-   - Instagram placeholder section (links to @dujyoti.minakshi)
-   - Closing quote + Begin Your Journey button
-   - Footer with contact, Instagram, Book Appointment, email
-2. Booking modal/page:
-   - Service selector
-   - Available date/time slot picker (from backend)
-   - Form: name, email, DOB, TOB, birth place (text + lat/lng fields), gender, question
-   - On-screen confirmation on success
-3. Admin area (login-protected):
-   - Login page
-   - Availability tab: add/remove date+time slots
-   - Bookings tab: table of all appointments with full details
-   - Cancel booking action
+1. Regenerate the Motoko backend with a corrected `claimFirstAdmin` that writes directly into `accessControlState.userRoles` with role `#admin` and sets `accessControlState.adminAssigned := true`, so all `AccessControl.isAdmin()` checks pass after claiming.
+2. No frontend changes needed — the existing flow (sign in → "Set Me As Admin" button → dashboard) is correct; only the backend registration is broken.

@@ -9,34 +9,47 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronRight, Loader2, Tag, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import type { AvailableSlot } from "../backend.d";
-import type { Booking } from "../backend.d";
+import type { AvailableSlot, Booking, Coupon } from "../backend.d";
 import { ZodiacWheel } from "../components/ZodiacWheel";
-import { useAvailableSlots, useBookAppointment } from "../hooks/useQueries";
+import {
+  useAvailableSlots,
+  useBookAppointment,
+  useServiceFees,
+  useValidateCoupon,
+} from "../hooks/useQueries";
 
 const SERVICES = [
   {
     id: "birth-chart",
     name: "Birth Chart Reading",
     duration: "45–60 min",
+    defaultPrice: "₹1,500",
     desc: "A comprehensive reading of your natal chart — personality, strengths, and life direction.",
   },
   {
     id: "life-guidance",
     name: "Life Guidance Session",
     duration: "45–60 min",
+    defaultPrice: "₹2,000",
     desc: "Focused consultation on career, relationships, or major life decisions.",
   },
   {
     id: "psychological",
     name: "Psychological Astrology",
     duration: "45–60 min",
+    defaultPrice: "₹2,500",
     desc: "Deep exploration of mind patterns and recurring behavioral tendencies.",
   },
 ];
+
+const SERVICE_NAMES: Record<string, string> = {
+  "birth-chart": "Birth Chart Reading",
+  "life-guidance": "Life Guidance Session",
+  psychological: "Psychological Astrology",
+};
 
 const STEPS = ["Service", "Date & Time", "Your Details"];
 
@@ -74,8 +87,15 @@ export function BookingPage() {
     null,
   );
 
+  // Coupon state
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+  const [couponError, setCouponError] = useState("");
+
   const { data: slots, isLoading: slotsLoading } = useAvailableSlots();
+  const { data: serviceFees } = useServiceFees();
   const bookAppointment = useBookAppointment();
+  const validateCoupon = useValidateCoupon();
 
   // Group available slots by date
   const slotsByDate = (slots ?? [])
@@ -93,6 +113,33 @@ export function BookingPage() {
 
   const handleFormChange = (field: keyof BookingForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const getFeeForService = (serviceId: string) => {
+    const serviceName = SERVICE_NAMES[serviceId];
+    if (!serviceName || !serviceFees) return null;
+    return serviceFees.find((f) => f.serviceName === serviceName) ?? null;
+  };
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setCouponError("");
+    try {
+      const coupon = await validateCoupon.mutateAsync(
+        couponInput.trim().toUpperCase(),
+      );
+      setAppliedCoupon(coupon);
+      toast.success(`${coupon.discountPercent}% discount applied!`);
+    } catch (e: unknown) {
+      setCouponError(e instanceof Error ? e.message : "Invalid coupon code.");
+      setAppliedCoupon(null);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput("");
+    setCouponError("");
   };
 
   const canProceedStep0 = !!selectedService;
@@ -113,7 +160,7 @@ export function BookingPage() {
       const booking = await bookAppointment.mutateAsync({
         clientName: form.clientName,
         email: form.email,
-        service: selectedService,
+        service: SERVICE_NAMES[selectedService] ?? selectedService,
         slotId: selectedSlot.id,
         dob: form.dob,
         tob: form.tob,
@@ -122,6 +169,7 @@ export function BookingPage() {
         lng: Number.parseFloat(form.lng),
         gender: form.gender,
         question: form.question,
+        couponCode: appliedCoupon?.code,
       });
       setConfirmedBooking(booking);
       toast.success("Booking confirmed!");
@@ -144,6 +192,9 @@ export function BookingPage() {
           setSelectedDate("");
           setSelectedSlot(null);
           setForm(EMPTY_FORM);
+          setAppliedCoupon(null);
+          setCouponInput("");
+          setCouponError("");
         }}
       />
     );
@@ -221,47 +272,61 @@ export function BookingPage() {
             <h2 className="font-display text-2xl text-cream mb-6">
               Choose Your Consultation
             </h2>
-            {SERVICES.map((service) => (
-              <button
-                type="button"
-                key={service.id}
-                data-ocid="booking.service.select"
-                onClick={() => setSelectedService(service.id)}
-                className={`w-full text-left p-6 border transition-all duration-300 rounded-sm group ${
-                  selectedService === service.id
-                    ? "border-gold bg-gold/8 shadow-gold-sm"
-                    : "border-gold/20 hover:border-gold/45 card-cosmic"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-display text-xl text-cream group-hover:text-gold transition-colors">
-                        {service.name}
-                      </h3>
-                      <span className="text-gold/50 text-xs font-body tracking-wider border border-gold/20 px-2 py-0.5 rounded-sm">
-                        {service.duration}
-                      </span>
+            {SERVICES.map((service) => {
+              const fee = getFeeForService(service.id);
+              return (
+                <button
+                  type="button"
+                  key={service.id}
+                  data-ocid="booking.service.select"
+                  onClick={() => setSelectedService(service.id)}
+                  className={`w-full text-left p-6 border transition-all duration-300 rounded-sm group ${
+                    selectedService === service.id
+                      ? "border-gold bg-gold/8 shadow-gold-sm"
+                      : "border-gold/20 hover:border-gold/45 card-cosmic"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
+                        <h3 className="font-display text-xl text-cream group-hover:text-gold transition-colors">
+                          {service.name}
+                        </h3>
+                        <span className="text-gold/50 text-xs font-body tracking-wider border border-gold/20 px-2 py-0.5 rounded-sm">
+                          {service.duration}
+                        </span>
+                        {fee ? (
+                          <span className="text-gold text-sm font-body font-medium border border-gold/30 bg-gold/10 px-2.5 py-0.5 rounded-sm">
+                            {fee.currency === "INR" ? "₹" : fee.currency}
+                            {Number(fee.amount).toLocaleString("en-IN")}
+                          </span>
+                        ) : (
+                          <span className="text-gold text-sm font-body font-medium border border-gold/30 bg-gold/10 px-2.5 py-0.5 rounded-sm">
+                            {service.defaultPrice}
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-body text-cream/65 text-base">
+                        {service.desc}
+                      </p>
                     </div>
-                    <p className="font-body text-cream/65 text-base">
-                      {service.desc}
-                    </p>
+                    <div
+                      className={`w-5 h-5 rounded-sm border-2 flex-shrink-0 mt-1 transition-all ${
+                        selectedService === service.id
+                          ? "border-gold bg-gold"
+                          : "border-gold/30"
+                      }`}
+                    />
                   </div>
-                  <div
-                    className={`w-5 h-5 rounded-sm border-2 flex-shrink-0 mt-1 transition-all ${
-                      selectedService === service.id
-                        ? "border-gold bg-gold"
-                        : "border-gold/30"
-                    }`}
-                  />
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
 
             <div className="pt-4 flex justify-end">
               <Button
                 onClick={() => setStep(1)}
                 disabled={!canProceedStep0}
+                data-ocid="booking.service.primary_button"
                 className="btn-gold px-8 py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2"
               >
                 Continue
@@ -392,6 +457,7 @@ export function BookingPage() {
               <Button
                 variant="ghost"
                 onClick={() => setStep(0)}
+                data-ocid="booking.back.button"
                 className="text-cream/50 hover:text-cream font-body"
               >
                 Back
@@ -399,6 +465,7 @@ export function BookingPage() {
               <Button
                 onClick={() => setStep(2)}
                 disabled={!canProceedStep1}
+                data-ocid="booking.date.primary_button"
                 className="btn-gold px-8 py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2"
               >
                 Continue
@@ -619,10 +686,89 @@ export function BookingPage() {
               />
             </div>
 
+            {/* ── Coupon Code ─── */}
+            <div className="space-y-3">
+              <Label className="text-cream/70 font-body text-sm tracking-wide">
+                Coupon Code
+                <span className="text-cream/35 ml-2 text-xs">(optional)</span>
+              </Label>
+
+              {appliedCoupon ? (
+                <div
+                  className="flex items-center gap-3 p-3 border border-gold/40 bg-gold/8 rounded-sm"
+                  data-ocid="booking.coupon.success_state"
+                >
+                  <Tag className="w-4 h-4 text-gold flex-shrink-0" />
+                  <span className="font-body text-gold text-sm flex-1">
+                    <span className="font-medium">{appliedCoupon.code}</span>
+                    {" — "}
+                    {Number(appliedCoupon.discountPercent)}% discount applied
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    data-ocid="booking.coupon.delete_button"
+                    className="text-cream/40 hover:text-cream transition-colors p-1"
+                    aria-label="Remove coupon"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <Input
+                    data-ocid="booking.coupon.input"
+                    placeholder="Enter coupon code"
+                    value={couponInput}
+                    onChange={(e) => {
+                      setCouponInput(e.target.value.toUpperCase());
+                      setCouponError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleApplyCoupon();
+                    }}
+                    className="bg-card border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body uppercase tracking-widest"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleApplyCoupon}
+                    disabled={!couponInput.trim() || validateCoupon.isPending}
+                    data-ocid="booking.coupon.primary_button"
+                    className="btn-gold px-5 rounded-none tracking-wider uppercase text-sm whitespace-nowrap"
+                  >
+                    {validateCoupon.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Apply"
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {couponError && (
+                <p
+                  className="text-destructive text-sm font-body"
+                  data-ocid="booking.coupon.error_state"
+                >
+                  {couponError}
+                </p>
+              )}
+            </div>
+
+            {/* Fee summary */}
+            {selectedService && (
+              <FeeSummary
+                serviceId={selectedService}
+                appliedCoupon={appliedCoupon}
+                serviceFees={serviceFees ?? []}
+              />
+            )}
+
             <div className="pt-2 flex justify-between">
               <Button
                 variant="ghost"
                 onClick={() => setStep(1)}
+                data-ocid="booking.details.back.button"
                 className="text-cream/50 hover:text-cream font-body"
               >
                 Back
@@ -649,6 +795,67 @@ export function BookingPage() {
     </div>
   );
 }
+
+// ── Fee Summary Component ────────────────────────────────────────
+
+const DEFAULT_FEES: Record<string, number> = {
+  "birth-chart": 1500,
+  "life-guidance": 2000,
+  psychological: 2500,
+};
+
+function FeeSummary({
+  serviceId,
+  appliedCoupon,
+  serviceFees,
+}: {
+  serviceId: string;
+  appliedCoupon: Coupon | null;
+  serviceFees: import("../backend.d").ServiceFee[];
+}) {
+  const serviceName = SERVICE_NAMES[serviceId];
+  const fee = serviceFees.find((f) => f.serviceName === serviceName);
+
+  const originalAmount = fee
+    ? Number(fee.amount)
+    : (DEFAULT_FEES[serviceId] ?? 0);
+  const symbol = fee ? (fee.currency === "INR" ? "₹" : fee.currency) : "₹";
+  const discount = appliedCoupon ? Number(appliedCoupon.discountPercent) : 0;
+  const discountedAmount = Math.round(originalAmount * (1 - discount / 100));
+
+  return (
+    <div className="p-4 border border-gold/20 rounded-sm bg-gold/5 space-y-2">
+      <h3 className="font-body text-cream/70 text-xs tracking-wider uppercase mb-3">
+        Fee Summary
+      </h3>
+      <div className="flex justify-between font-body text-sm">
+        <span className="text-cream/60">Consultation Fee</span>
+        <span className="text-cream/90">
+          {symbol}
+          {originalAmount.toLocaleString("en-IN")}
+        </span>
+      </div>
+      {discount > 0 && (
+        <div className="flex justify-between font-body text-sm">
+          <span className="text-gold/70">Discount ({discount}%)</span>
+          <span className="text-gold">
+            −{symbol}
+            {(originalAmount - discountedAmount).toLocaleString("en-IN")}
+          </span>
+        </div>
+      )}
+      <div className="border-t border-gold/15 pt-2 flex justify-between font-body">
+        <span className="text-cream/80 text-sm font-medium">Total</span>
+        <span className="text-gold font-medium">
+          {symbol}
+          {discountedAmount.toLocaleString("en-IN")}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Confirmation Screen ───────────────────────────────────────────
 
 function ConfirmationScreen({
   booking,
@@ -727,6 +934,24 @@ function ConfirmationScreen({
               </span>
               <span className="text-cream/90">{booking.tob}</span>
             </div>
+            {booking.feeApplied > 0n && (
+              <div>
+                <span className="text-cream/45 block text-xs tracking-wider uppercase mb-1">
+                  Fee Applied
+                </span>
+                <span className="text-gold font-medium">
+                  ₹{Number(booking.feeApplied).toLocaleString("en-IN")}
+                </span>
+              </div>
+            )}
+            {booking.couponUsed && (
+              <div>
+                <span className="text-cream/45 block text-xs tracking-wider uppercase mb-1">
+                  Coupon Used
+                </span>
+                <span className="text-gold">{booking.couponUsed}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -739,6 +964,7 @@ function ConfirmationScreen({
         <Button
           onClick={onReset}
           variant="outline"
+          data-ocid="booking.reset.button"
           className="btn-gold-outline px-8 py-3 tracking-widest uppercase text-sm rounded-none"
         >
           Book Another Session

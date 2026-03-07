@@ -66,7 +66,8 @@ const PURUSHARTHAS = [
 const SERVICES = [
   {
     title: "Birth Chart Reading",
-    duration: "90 minutes",
+    duration: "45–60 min",
+    price: "₹1,500",
     desc: "A deep exploration of your natal chart — your personality, core strengths, emotional tendencies, karmic patterns, and the overall direction of your life as written in the sky at your birth.",
     highlights: [
       "Personality & soul nature",
@@ -77,7 +78,8 @@ const SERVICES = [
   },
   {
     title: "Life Guidance Session",
-    duration: "75 minutes",
+    duration: "45–60 min",
+    price: "₹2,000",
     desc: "A focused consultation on a specific life area — career transitions, relationship dynamics, important decisions. Bring your question; the chart will speak.",
     highlights: [
       "Career & purpose alignment",
@@ -88,7 +90,8 @@ const SERVICES = [
   },
   {
     title: "Psychological Astrology",
-    duration: "90 minutes",
+    duration: "45–60 min",
+    price: "₹2,500",
     desc: "An introspective session exploring the recurring patterns of the mind and behavior encoded in your birth chart — a bridge between classical Jyotiṣa and the inner landscape.",
     highlights: [
       "Behavioral & mental patterns",
@@ -323,9 +326,14 @@ export function HomePage() {
                     <span className="text-gold/40 font-display text-4xl leading-none">
                       0{i + 1}
                     </span>
-                    <span className="text-gold/50 text-xs tracking-widest font-body">
-                      {service.duration}
-                    </span>
+                    <div className="text-right">
+                      <div className="text-gold font-display text-xl leading-none">
+                        {service.price}
+                      </div>
+                      <div className="text-gold/50 text-xs tracking-widest font-body mt-1">
+                        {service.duration}
+                      </div>
+                    </div>
                   </div>
                   <h3 className="font-display text-2xl text-cream mb-4 group-hover:text-gold transition-colors">
                     {service.title}

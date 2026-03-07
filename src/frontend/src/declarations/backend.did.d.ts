@@ -24,30 +24,64 @@ export interface Booking {
   'tob' : string,
   'service' : string,
   'status' : string,
+  'couponUsed' : string,
   'question' : string,
   'clientName' : string,
   'createdAt' : bigint,
   'birthPlace' : string,
   'email' : string,
   'slotId' : bigint,
+  'feeApplied' : bigint,
   'slotDate' : string,
   'gender' : string,
   'slotTime' : string,
 }
-export type Result = { 'ok' : boolean } |
+export interface Coupon {
+  'active' : boolean,
+  'code' : string,
+  'usageCount' : bigint,
+  'maxUsage' : bigint,
+  'discountPercent' : bigint,
+}
+export interface Remedy {
+  'id' : bigint,
+  'title' : string,
+  'content' : string,
+  'bookingId' : bigint,
+  'clientName' : string,
+  'createdAt' : bigint,
+}
+export type Result = { 'ok' : Coupon } |
   { 'err' : string };
-export type Result_1 = { 'ok' : Array<Booking> } |
+export type Result_1 = { 'ok' : Remedy } |
   { 'err' : string };
-export type Result_2 = { 'ok' : Booking } |
+export type Result_2 = { 'ok' : boolean } |
   { 'err' : string };
-export type Result_3 = { 'ok' : AvailableSlot } |
+export type Result_3 = { 'ok' : ServiceFee } |
   { 'err' : string };
+export type Result_4 = { 'ok' : Array<Coupon> } |
+  { 'err' : string };
+export type Result_5 = { 'ok' : Array<Remedy> } |
+  { 'err' : string };
+export type Result_6 = { 'ok' : Array<Booking> } |
+  { 'err' : string };
+export type Result_7 = { 'ok' : Booking } |
+  { 'err' : string };
+export type Result_8 = { 'ok' : AvailableSlot } |
+  { 'err' : string };
+export interface ServiceFee {
+  'serviceName' : string,
+  'currency' : string,
+  'amount' : bigint,
+}
+export interface UserProfile { 'name' : string }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
-  'addSlot' : ActorMethod<[string, string], Result_3>,
+  'addRemedy' : ActorMethod<[bigint, string, string, string], Result_1>,
+  'addSlot' : ActorMethod<[string, string], Result_8>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'bookAppointment' : ActorMethod<
     [
@@ -62,16 +96,34 @@ export interface _SERVICE {
       number,
       string,
       string,
+      [] | [string],
     ],
-    Result_2
+    Result_7
   >,
-  'cancelBooking' : ActorMethod<[bigint], Result>,
+  'cancelBooking' : ActorMethod<[bigint], Result_2>,
+  'claimFirstAdmin' : ActorMethod<[], boolean>,
+  'createCoupon' : ActorMethod<[string, bigint, bigint], Result>,
+  'deleteCoupon' : ActorMethod<[string], Result_2>,
+  'deleteRemedy' : ActorMethod<[bigint], Result_2>,
+  'forceClaimAdmin' : ActorMethod<[string], boolean>,
+  'getAllRemedies' : ActorMethod<[], Result_5>,
   'getAvailableSlots' : ActorMethod<[], Array<AvailableSlot>>,
-  'getBookings' : ActorMethod<[], Result_1>,
+  'getBookings' : ActorMethod<[], Result_6>,
+  'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getRemediesForBooking' : ActorMethod<[bigint], Result_5>,
+  'getServiceFees' : ActorMethod<[], Array<ServiceFee>>,
+  'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isAdmin' : ActorMethod<[], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
-  'removeSlot' : ActorMethod<[bigint], Result>,
+  'listCoupons' : ActorMethod<[], Result_4>,
+  'removeServiceFee' : ActorMethod<[string], Result_2>,
+  'removeSlot' : ActorMethod<[bigint], Result_2>,
+  'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'setServiceFee' : ActorMethod<[string, bigint, string], Result_3>,
+  'toggleCouponStatus' : ActorMethod<[string, boolean], Result_2>,
+  'updateRemedy' : ActorMethod<[bigint, string, string], Result_1>,
+  'validateCoupon' : ActorMethod<[string], Result>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];
