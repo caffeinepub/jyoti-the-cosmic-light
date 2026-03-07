@@ -197,18 +197,28 @@ export function getSecretFromHash(paramName: string): string | null {
 }
 
 /**
- * Gets a secret parameter with fallback chain: hash -> sessionStorage
- * This is the recommended way to handle sensitive parameters like admin tokens
+ * Gets a secret parameter with fallback chain: sessionStorage -> query string -> hash
  *
- * Security benefits over regular URL params:
- * - Hash fragments are not sent to the server
- * - Not logged in server access logs
- * - Not sent in HTTP Referer headers
- * - Automatically cleared from URL after extraction
+ * This order is important: sessionStorage is checked first because Internet Identity
+ * redirects wipe the URL query string. By persisting the token to sessionStorage before
+ * the II login redirect, we can recover it after the redirect completes.
  *
  * @param paramName - The name of the secret parameter
  * @returns The secret value if found, null otherwise
  */
 export function getSecretParameter(paramName: string): string | null {
+  // First check sessionStorage (survives II login redirects)
+  const stored = getSessionParameter(paramName);
+  if (stored) return stored;
+
+  // Check regular query string (e.g. ?caffeineAdminToken=xxx)
+  const urlParams = new URLSearchParams(window.location.search);
+  const fromQuery = urlParams.get(paramName);
+  if (fromQuery) {
+    storeSessionParameter(paramName, fromQuery);
+    return fromQuery;
+  }
+
+  // Fall back to hash fragment
   return getSecretFromHash(paramName);
 }

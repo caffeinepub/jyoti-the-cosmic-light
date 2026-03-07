@@ -70,7 +70,6 @@ import {
   useAvailableSlots,
   useBookings,
   useCancelBooking,
-  useClaimFirstAdmin,
   useCreateCoupon,
   useDeleteCoupon,
   useDeleteRemedy,
@@ -99,6 +98,21 @@ export function AdminPage() {
     useInternetIdentity();
   const { isFetching: isActorFetching } = useActor();
   const { data: isAdminUser, isLoading: isAdminLoading } = useIsAdmin();
+
+  // Persist admin token from URL query string into sessionStorage BEFORE
+  // Internet Identity login redirect wipes the URL parameters.
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("caffeineAdminToken");
+    if (token) {
+      try {
+        sessionStorage.setItem("caffeineAdminToken", token);
+      } catch {}
+      // Clean the token from the address bar so it's not visible in browser history
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState(null, "", cleanUrl);
+    }
+  }, []);
 
   // Add a timeout so loading never spins forever after login
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
@@ -152,6 +166,21 @@ function AdminLogin({
   onLogin: () => void;
   loginStatus: string;
 }) {
+  // Persist token before II login wipes the URL (redundant safety net —
+  // AdminPage root also does this, but capturing here ensures it runs even
+  // if the user navigates directly to /admin with a token)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("caffeineAdminToken");
+    if (token) {
+      try {
+        sessionStorage.setItem("caffeineAdminToken", token);
+      } catch {}
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState(null, "", cleanUrl);
+    }
+  }, []);
+
   return (
     <div
       className="min-h-screen flex items-center justify-center pt-24 px-6"
@@ -187,30 +216,20 @@ function AdminLogin({
 }
 
 function AdminUnauthorized() {
-  const { identity, login, loginStatus } = useInternetIdentity();
-  const claimFirstAdmin = useClaimFirstAdmin();
-  const [claimed, setClaimed] = useState(false);
-  const [claimError, setClaimError] = useState<string>("");
-
-  // Check if the current identity is genuinely authenticated (non-anonymous)
-  const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
-
-  const handleClaim = async () => {
-    if (!isAuthenticated) return;
-    setClaimError("");
+  // This state means the user is authenticated but their principal was
+  // registered as #user instead of #admin — this happens when the admin
+  // token was absent (empty string) during actor initialisation because
+  // the II login redirect wiped the URL query params before we could read it.
+  //
+  // The fix: clear the stored token (so we can reload fresh), then reload.
+  // On the next load, getSecretParameter will check sessionStorage first
+  // (which we persist BEFORE the redirect now), so the token survives.
+  const handleRetry = () => {
+    // Clear any stale token from storage so the next load reads it fresh from the URL
     try {
-      const result = await claimFirstAdmin.mutateAsync();
-      if (result) {
-        setClaimed(true);
-        setTimeout(() => window.location.reload(), 1500);
-      } else {
-        setClaimError(
-          "Could not claim admin — an admin is already assigned for this app. If you are Minakshi and this is unexpected, please contact support.",
-        );
-      }
-    } catch (e: unknown) {
-      setClaimError(e instanceof Error ? e.message : "Could not claim admin.");
-    }
+      sessionStorage.removeItem("caffeineAdminToken");
+    } catch {}
+    window.location.reload();
   };
 
   return (
@@ -220,86 +239,29 @@ function AdminUnauthorized() {
       data-ocid="admin.error_state"
     >
       <div className="text-center max-w-md w-full">
-        {isAuthenticated ? (
-          <>
-            <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
-              <Shield className="w-8 h-8 text-gold" />
-            </div>
-            <h1 className="font-display text-3xl text-cream mb-3">
-              Claim Admin Access
-            </h1>
-            <div className="gold-divider w-20 mx-auto mb-6" />
-
-            {claimed ? (
-              <p
-                className="font-body text-gold text-sm"
-                data-ocid="admin.claim.success_state"
-              >
-                Admin access claimed! Reloading…
-              </p>
-            ) : (
-              <>
-                <p className="font-body text-cream/60 mb-8">
-                  If you are Minakshi, click below to register as the admin.
-                  This can only be done once.
-                </p>
-
-                <Button
-                  onClick={handleClaim}
-                  disabled={claimFirstAdmin.isPending}
-                  data-ocid="admin.claim.primary_button"
-                  className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none"
-                >
-                  {claimFirstAdmin.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Claiming…
-                    </>
-                  ) : (
-                    "Set Me As Admin"
-                  )}
-                </Button>
-
-                {claimError && (
-                  <p
-                    className="font-body text-destructive text-sm mt-4"
-                    data-ocid="admin.claim.error_state"
-                  >
-                    {claimError}
-                  </p>
-                )}
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
-              <Shield className="w-8 h-8 text-gold" />
-            </div>
-            <h1 className="font-display text-3xl text-cream mb-3">
-              Sign In Required
-            </h1>
-            <div className="gold-divider w-20 mx-auto mb-6" />
-            <p className="font-body text-cream/60 mb-8">
-              Sign in with Internet Identity to access the admin panel.
-            </p>
-            <Button
-              onClick={login}
-              disabled={loginStatus === "logging-in"}
-              data-ocid="admin.login.primary_button"
-              className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none"
-            >
-              {loginStatus === "logging-in" ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Signing in…
-                </>
-              ) : (
-                "Sign In with Internet Identity"
-              )}
-            </Button>
-          </>
-        )}
+        <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
+          <Shield className="w-8 h-8 text-gold" />
+        </div>
+        <h1 className="font-display text-3xl text-cream mb-3">Access Denied</h1>
+        <div className="gold-divider w-20 mx-auto mb-6" />
+        <p className="font-body text-cream/60 mb-4">
+          Your identity is not registered as admin. This usually happens when
+          the admin token was missing during sign-in.
+        </p>
+        <p className="font-body text-cream/45 text-sm mb-8">
+          To fix this, make sure the URL contains{" "}
+          <code className="text-gold/80 text-xs bg-gold/10 px-1 py-0.5 rounded">
+            ?caffeineAdminToken=YOUR_TOKEN
+          </code>{" "}
+          before signing in, then click Try Again.
+        </p>
+        <Button
+          onClick={handleRetry}
+          data-ocid="admin.retry.primary_button"
+          className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none"
+        >
+          Try Again
+        </Button>
       </div>
     </div>
   );

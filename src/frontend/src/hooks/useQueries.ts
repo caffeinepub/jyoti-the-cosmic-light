@@ -41,7 +41,12 @@ export function useIsAdmin() {
     queryKey: ["isAdmin"],
     queryFn: async () => {
       if (!actor) return false;
-      return actor.isAdmin();
+      try {
+        return await actor.isAdmin();
+      } catch {
+        // If the backend throws (e.g. unregistered caller), treat as non-admin
+        return false;
+      }
     },
     enabled: !!actor && !isFetching,
   });
