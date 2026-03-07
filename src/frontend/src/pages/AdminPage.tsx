@@ -216,16 +216,35 @@ function AdminLogin({
 }
 
 function AdminUnauthorized() {
-  // This state means the user is authenticated but their principal was
-  // registered as #user instead of #admin — this happens when the admin
-  // token was absent (empty string) during actor initialisation because
-  // the II login redirect wiped the URL query params before we could read it.
-  //
-  // The fix: clear the stored token (so we can reload fresh), then reload.
-  // On the next load, getSecretParameter will check sessionStorage first
-  // (which we persist BEFORE the redirect now), so the token survives.
-  const handleRetry = () => {
-    // Clear any stale token from storage so the next load reads it fresh from the URL
+  const { identity } = useInternetIdentity();
+  const { actor } = useActor();
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+
+  const handleClaim = async () => {
+    if (!actor || !identity || identity.getPrincipal().isAnonymous()) return;
+    setClaiming(true);
+    setClaimError(null);
+    try {
+      const result = await actor.claimFirstAdmin();
+      if (result) {
+        // Reload so isAdmin() re-evaluates with fresh actor state
+        window.location.reload();
+      } else {
+        setClaimError(
+          "Could not claim admin. An admin may already be assigned. Please contact support.",
+        );
+      }
+    } catch (e: unknown) {
+      setClaimError(
+        e instanceof Error ? e.message : "Failed to claim admin access.",
+      );
+    } finally {
+      setClaiming(false);
+    }
+  };
+
+  const handleSignOut = () => {
     try {
       sessionStorage.removeItem("caffeineAdminToken");
     } catch {}
@@ -244,23 +263,43 @@ function AdminUnauthorized() {
         </div>
         <h1 className="font-display text-3xl text-cream mb-3">Access Denied</h1>
         <div className="gold-divider w-20 mx-auto mb-6" />
-        <p className="font-body text-cream/60 mb-4">
-          Your identity is not registered as admin. This usually happens when
-          the admin token was missing during sign-in.
+        <p className="font-body text-cream/60 mb-6">
+          Your identity is not registered as admin. If you are Minakshi, click
+          below to claim admin access.
         </p>
-        <p className="font-body text-cream/45 text-sm mb-8">
-          To fix this, make sure the URL contains{" "}
-          <code className="text-gold/80 text-xs bg-gold/10 px-1 py-0.5 rounded">
-            ?caffeineAdminToken=YOUR_TOKEN
-          </code>{" "}
-          before signing in, then click Try Again.
-        </p>
+
+        {claimError && (
+          <p
+            className="font-body text-destructive text-sm mb-6 bg-destructive/10 border border-destructive/25 rounded-sm px-4 py-3"
+            data-ocid="admin.claim.error_state"
+          >
+            {claimError}
+          </p>
+        )}
+
         <Button
-          onClick={handleRetry}
-          data-ocid="admin.retry.primary_button"
-          className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none"
+          onClick={handleClaim}
+          disabled={claiming || !actor}
+          data-ocid="admin.claim.primary_button"
+          className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none mb-3 inline-flex items-center justify-center gap-2"
         >
-          Try Again
+          {claiming ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Claiming…
+            </>
+          ) : (
+            "Claim Admin Access"
+          )}
+        </Button>
+
+        <Button
+          onClick={handleSignOut}
+          variant="ghost"
+          data-ocid="admin.signout.secondary_button"
+          className="w-full text-cream/40 hover:text-cream/70 text-sm font-body tracking-wide"
+        >
+          Sign in with a different identity
         </Button>
       </div>
     </div>

@@ -197,28 +197,33 @@ export function getSecretFromHash(paramName: string): string | null {
 }
 
 /**
- * Gets a secret parameter with fallback chain: sessionStorage -> query string -> hash
+ * Gets a secret parameter with fallback chain:
+ *   1. sessionStorage (survives II login redirect)
+ *   2. regular query string (?param=value)
+ *   3. URL hash fragment (#param=value or #/?param=value)
  *
- * This order is important: sessionStorage is checked first because Internet Identity
- * redirects wipe the URL query string. By persisting the token to sessionStorage before
- * the II login redirect, we can recover it after the redirect completes.
+ * When found in the URL (query string or hash), the value is immediately
+ * persisted to sessionStorage so it survives the Internet Identity redirect.
  *
  * @param paramName - The name of the secret parameter
  * @returns The secret value if found, null otherwise
  */
 export function getSecretParameter(paramName: string): string | null {
-  // First check sessionStorage (survives II login redirects)
+  // 1. sessionStorage first — this is the only reliable source after II redirect
   const stored = getSessionParameter(paramName);
-  if (stored) return stored;
-
-  // Check regular query string (e.g. ?caffeineAdminToken=xxx)
-  const urlParams = new URLSearchParams(window.location.search);
-  const fromQuery = urlParams.get(paramName);
-  if (fromQuery) {
-    storeSessionParameter(paramName, fromQuery);
-    return fromQuery;
+  if (stored !== null && stored !== "") {
+    return stored;
   }
 
-  // Fall back to hash fragment
-  return getSecretFromHash(paramName);
+  // 2. Regular query string (?caffeineAdminToken=xxx)
+  const queryParams = new URLSearchParams(window.location.search);
+  const queryValue = queryParams.get(paramName);
+  if (queryValue !== null && queryValue !== "") {
+    storeSessionParameter(paramName, queryValue);
+    return queryValue;
+  }
+
+  // 3. Hash fragment (#caffeineAdminToken=xxx or #/?caffeineAdminToken=xxx)
+  const hashSecret = getSecretFromHash(paramName);
+  return hashSecret;
 }
