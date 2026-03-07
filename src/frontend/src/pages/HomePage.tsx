@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ZodiacWheel } from "../components/ZodiacWheel";
+import { useServiceFees } from "../hooks/useQueries";
 import { type LocalReview, loadLocalReviews } from "../utils/reviewsStore";
 
 const INSTAGRAM_POSTS = [
@@ -308,7 +309,26 @@ const SERVICES = [
   },
 ];
 
+const DEFAULT_FEES: Record<string, number> = {
+  "Birth Chart Reading": 1500,
+  "Life Guidance Session": 2000,
+  "Psychological Astrology": 2500,
+};
+
 export function HomePage() {
+  const { data: serviceFees } = useServiceFees();
+
+  const getDisplayPrice = (title: string) => {
+    if (serviceFees) {
+      const fee = serviceFees.find((f) => f.serviceName === title);
+      if (fee) {
+        const symbol = fee.currency === "INR" ? "₹" : fee.currency;
+        return `${symbol}${Number(fee.amount).toLocaleString("en-IN")}`;
+      }
+    }
+    return `₹${(DEFAULT_FEES[title] ?? 0).toLocaleString("en-IN")}`;
+  };
+
   return (
     <main className="relative overflow-hidden">
       {/* ─── Hero Section ──────────────────────────────────────────── */}
@@ -534,7 +554,7 @@ export function HomePage() {
                     </span>
                     <div className="text-right">
                       <div className="text-gold font-display text-xl leading-none">
-                        {service.price}
+                        {getDisplayPrice(service.title)}
                       </div>
                       <div className="text-gold/50 text-xs tracking-widest font-body mt-1">
                         {service.duration}

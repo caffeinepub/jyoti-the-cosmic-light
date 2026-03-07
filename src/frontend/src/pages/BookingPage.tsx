@@ -10,17 +10,19 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Camera,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   Copy,
   Loader2,
+  MapPin,
   Sparkles,
   Tag,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AvailableSlot, Booking, Coupon } from "../backend.d";
 import { ZodiacWheel } from "../components/ZodiacWheel";
@@ -92,6 +94,232 @@ const EMPTY_FORM: BookingForm = {
   question: "",
 };
 
+// ── Place Search Component ───────────────────────────────────────
+
+interface NominatimResult {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+  address?: {
+    city?: string;
+    town?: string;
+    village?: string;
+    state?: string;
+    country?: string;
+  };
+}
+
+function formatPlaceName(result: NominatimResult): string {
+  const { address } = result;
+  if (!address) return result.display_name;
+  const parts: string[] = [];
+  const city = address.city ?? address.town ?? address.village;
+  if (city) parts.push(city);
+  if (address.state) parts.push(address.state);
+  if (address.country) parts.push(address.country);
+  return parts.length > 0 ? parts.join(", ") : result.display_name;
+}
+
+function PlaceSearch({
+  onSelect,
+  value,
+  onClear,
+}: {
+  onSelect: (place: string, lat: string, lng: string) => void;
+  value: string;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<NominatimResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [noResults, setNoResults] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Debounced fetch
+  useEffect(() => {
+    if (!query.trim() || query.length < 2) {
+      setResults([]);
+      setIsOpen(false);
+      setNoResults(false);
+      return;
+    }
+
+    setNoResults(false);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`,
+          {
+            headers: {
+              "User-Agent": "dujyoti-astrology/1.0",
+              "Accept-Language": "en",
+            },
+          },
+        );
+        const data: NominatimResult[] = await res.json();
+        setResults(data);
+        setIsOpen(true);
+        setActiveIndex(-1);
+        setNoResults(data.length === 0);
+      } catch {
+        setResults([]);
+        setNoResults(true);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
+  const handleSelect = (result: NominatimResult) => {
+    const place = formatPlaceName(result);
+    onSelect(place, result.lat, result.lon);
+    setQuery("");
+    setResults([]);
+    setIsOpen(false);
+    setActiveIndex(-1);
+    setNoResults(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isOpen && e.key !== "Escape") return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((prev) => Math.min(prev + 1, results.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((prev) => Math.max(prev - 1, -1));
+    } else if (e.key === "Enter" && activeIndex >= 0) {
+      e.preventDefault();
+      handleSelect(results[activeIndex]);
+    } else if (e.key === "Escape") {
+      setIsOpen(false);
+      setActiveIndex(-1);
+    }
+  };
+
+  // Scroll active item into view
+  useEffect(() => {
+    if (activeIndex >= 0 && listRef.current) {
+      const item = listRef.current.children[activeIndex] as HTMLElement;
+      item?.scrollIntoView({ block: "nearest" });
+    }
+  }, [activeIndex]);
+
+  if (value) {
+    // Show selected state
+    return (
+      <div className="flex items-center gap-2 bg-card border border-gold/35 rounded-sm px-4 py-2.5">
+        <MapPin className="w-4 h-4 text-gold/70 flex-shrink-0" />
+        <span className="font-body text-cream/90 text-sm flex-1 truncate">
+          {value}
+        </span>
+        <button
+          type="button"
+          onClick={onClear}
+          data-ocid="booking.birthplace.delete_button"
+          className="text-cream/40 hover:text-cream transition-colors p-0.5 flex-shrink-0"
+          aria-label="Clear birth place"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold/50 pointer-events-none" />
+        <Input
+          ref={inputRef}
+          data-ocid="booking.birthplace.search_input"
+          placeholder="Type a city name…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={() => {
+            if (results.length > 0) setIsOpen(true);
+          }}
+          onBlur={() => {
+            // Delay to allow click on suggestion
+            setTimeout(() => setIsOpen(false), 200);
+          }}
+          autoComplete="off"
+          className="bg-card border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body pl-9 pr-9"
+          aria-autocomplete="list"
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          role="combobox"
+        />
+        {isLoading && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold/60 animate-spin" />
+        )}
+        {!isLoading && query && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setQuery("");
+              setResults([]);
+              setIsOpen(false);
+              setNoResults(false);
+              inputRef.current?.focus();
+            }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-cream/30 hover:text-cream/70 transition-colors"
+            aria-label="Clear search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Dropdown */}
+      {isOpen && (results.length > 0 || noResults) && (
+        <div
+          ref={listRef as React.RefObject<HTMLDivElement>}
+          aria-label="Place suggestions"
+          className="absolute z-50 w-full mt-1 bg-card border border-gold/20 rounded-sm shadow-lg max-h-52 overflow-y-auto"
+        >
+          {noResults ? (
+            <div className="px-4 py-3 font-body text-cream/40 text-sm italic">
+              No places found
+            </div>
+          ) : (
+            results.map((result, i) => (
+              <button
+                type="button"
+                key={result.place_id}
+                data-active={activeIndex === i ? "true" : undefined}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => handleSelect(result)}
+                className={`w-full text-left px-4 py-2.5 font-body text-sm cursor-pointer transition-colors flex items-start gap-2.5 ${
+                  activeIndex === i
+                    ? "bg-gold/15 text-cream"
+                    : "text-cream/80 hover:bg-gold/10 hover:text-cream"
+                }`}
+              >
+                <MapPin className="w-3.5 h-3.5 text-gold/50 flex-shrink-0 mt-0.5" />
+                <span className="truncate">{formatPlaceName(result)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BookingPage() {
   const [step, setStep] = useState(0);
   const [selectedService, setSelectedService] = useState<string>("");
@@ -139,10 +367,30 @@ export function BookingPage() {
   const handleApplyCoupon = async () => {
     if (!couponInput.trim()) return;
     setCouponError("");
+    const code = couponInput.trim().toUpperCase();
+
+    // Check 1-per-person restriction (stored in localStorage by admin when creating coupon)
     try {
-      const coupon = await validateCoupon.mutateAsync(
-        couponInput.trim().toUpperCase(),
+      const perPersonCoupons: string[] = JSON.parse(
+        localStorage.getItem("dujyoti_per_person_coupons") ?? "[]",
       );
+      if (perPersonCoupons.includes(code)) {
+        // Check if this email already used it (checked after email is filled)
+        if (form.email.trim()) {
+          const usedKey = `dujyoti_used_coupon_${code}_${form.email.trim().toLowerCase()}`;
+          if (localStorage.getItem(usedKey)) {
+            setCouponError(
+              "This coupon code has already been used for this email address.",
+            );
+            setAppliedCoupon(null);
+            return;
+          }
+        }
+      }
+    } catch {}
+
+    try {
+      const coupon = await validateCoupon.mutateAsync(code);
       setAppliedCoupon(coupon);
       toast.success(`${coupon.discountPercent}% discount applied!`);
     } catch (e: unknown) {
@@ -186,6 +434,20 @@ export function BookingPage() {
         question: form.question,
         couponCode: appliedCoupon?.code,
       });
+
+      // Mark 1-per-person coupon as used for this email
+      if (appliedCoupon?.code && form.email.trim()) {
+        try {
+          const perPersonCoupons: string[] = JSON.parse(
+            localStorage.getItem("dujyoti_per_person_coupons") ?? "[]",
+          );
+          if (perPersonCoupons.includes(appliedCoupon.code)) {
+            const usedKey = `dujyoti_used_coupon_${appliedCoupon.code}_${form.email.trim().toLowerCase()}`;
+            localStorage.setItem(usedKey, "1");
+          }
+        } catch {}
+      }
+
       setConfirmedBooking(booking);
       toast.success("Booking confirmed!");
     } catch (e: unknown) {
@@ -576,70 +838,26 @@ export function BookingPage() {
             </div>
 
             <div className="space-y-2">
-              <Label
-                className="text-cream/70 font-body text-sm tracking-wide"
-                htmlFor="birthPlace"
-              >
+              <Label className="text-cream/70 font-body text-sm tracking-wide">
                 Birth Place *
               </Label>
-              <Input
-                id="birthPlace"
-                data-ocid="booking.birthplace.input"
-                placeholder="City, State, Country"
+              <PlaceSearch
                 value={form.birthPlace}
-                onChange={(e) => handleFormChange("birthPlace", e.target.value)}
-                className="bg-card border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body"
+                onSelect={(place, lat, lng) => {
+                  handleFormChange("birthPlace", place);
+                  handleFormChange("lat", lat);
+                  handleFormChange("lng", lng);
+                }}
+                onClear={() => {
+                  handleFormChange("birthPlace", "");
+                  handleFormChange("lat", "");
+                  handleFormChange("lng", "");
+                }}
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-5">
-              <div className="space-y-2">
-                <Label
-                  className="text-cream/70 font-body text-sm tracking-wide"
-                  htmlFor="lat"
-                >
-                  Latitude *
-                  <span className="text-gold/45 ml-1 text-xs">
-                    (e.g. 28.6139)
-                  </span>
-                </Label>
-                <Input
-                  id="lat"
-                  type="number"
-                  step="0.0001"
-                  min="-90"
-                  max="90"
-                  data-ocid="booking.lat.input"
-                  placeholder="28.6139"
-                  value={form.lat}
-                  onChange={(e) => handleFormChange("lat", e.target.value)}
-                  className="bg-card border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  className="text-cream/70 font-body text-sm tracking-wide"
-                  htmlFor="lng"
-                >
-                  Longitude *
-                  <span className="text-gold/45 ml-1 text-xs">
-                    (e.g. 77.2090)
-                  </span>
-                </Label>
-                <Input
-                  id="lng"
-                  type="number"
-                  step="0.0001"
-                  min="-180"
-                  max="180"
-                  data-ocid="booking.lng.input"
-                  placeholder="77.2090"
-                  value={form.lng}
-                  onChange={(e) => handleFormChange("lng", e.target.value)}
-                  className="bg-card border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body"
-                />
-              </div>
+              <p className="text-cream/35 font-body text-xs">
+                Select your birth city from the suggestions — coordinates are
+                filled automatically.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -1194,11 +1412,36 @@ function ConfirmationScreen({
           <ReferFriendSection />
         </div>
 
-        <p className="font-body text-cream/45 text-sm mb-8">
-          A note will be sent to{" "}
-          <span className="text-gold/60">dujyoti.minnakshi@gmail.com</span>{" "}
-          about your booking. Please write directly if you need to reschedule.
-        </p>
+        {/* Screenshot instruction — most important next step */}
+        <div
+          className="card-cosmic rounded-sm p-6 mb-8 border border-gold/30 text-left"
+          data-ocid="booking.screenshot.panel"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 border border-gold/40 rounded-sm flex items-center justify-center flex-shrink-0 bg-gold/5">
+              <Camera className="w-5 h-5 text-gold" />
+            </div>
+            <div>
+              <h3 className="font-display text-lg text-gold mb-2">
+                Next Step — Send Your Screenshot
+              </h3>
+              <p className="font-body text-cream/70 text-sm leading-relaxed mb-3">
+                Please take a screenshot of this confirmation page and send it
+                to Minakshi at:
+              </p>
+              <a
+                href="mailto:dujyoti.minnakshi@gmail.com"
+                className="font-body text-gold font-medium text-sm hover:underline"
+              >
+                dujyoti.minnakshi@gmail.com
+              </a>
+              <p className="font-body text-cream/50 text-xs mt-2">
+                This helps Minakshi prepare for your session and confirm your
+                appointment.
+              </p>
+            </div>
+          </div>
+        </div>
 
         <Button
           onClick={onReset}

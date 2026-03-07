@@ -49,6 +49,9 @@ export function useIsAdmin() {
       }
     },
     enabled: !!actor && !isFetching,
+    staleTime: 0,
+    refetchOnMount: true,
+    retry: 2,
   });
 }
 
@@ -63,6 +66,8 @@ export function useServiceFees() {
       return actor.getServiceFees();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 }
 

@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
   Check,
@@ -41,6 +42,7 @@ import {
   Loader2,
   MessageSquare,
   Plus,
+  RefreshCw,
   Shield,
   Sparkles,
   Star,
@@ -70,6 +72,7 @@ import {
   useAvailableSlots,
   useBookings,
   useCancelBooking,
+  useClaimFirstAdmin,
   useCreateCoupon,
   useDeleteCoupon,
   useDeleteRemedy,
@@ -93,6 +96,26 @@ import {
 const ADMIN_TAB_CLS =
   "data-[state=active]:bg-gold data-[state=active]:text-navy-deep font-body tracking-wider rounded-sm px-4 py-2 text-cream/60 text-sm";
 
+/**
+ * Reads caffeineAdminToken from the URL query string and saves it to
+ * sessionStorage so that useActor can read it via getSecretParameter.
+ * Safe to call multiple times — does nothing if token is not in URL.
+ */
+function persistAdminToken() {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("caffeineAdminToken");
+    if (token) {
+      sessionStorage.setItem("caffeineAdminToken", token);
+      // Clean the token from the address bar so it's not visible in history
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState(null, "", cleanUrl);
+    }
+  } catch {
+    // sessionStorage may be unavailable in some environments
+  }
+}
+
 export function AdminPage() {
   const { identity, login, loginStatus, isInitializing } =
     useInternetIdentity();
@@ -101,23 +124,17 @@ export function AdminPage() {
 
   // Persist admin token from URL query string into sessionStorage BEFORE
   // Internet Identity login redirect wipes the URL parameters.
+  // MUST run synchronously at module-load time AND in useEffect for safety.
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get("caffeineAdminToken");
-    if (token) {
-      try {
-        sessionStorage.setItem("caffeineAdminToken", token);
-      } catch {}
-      // Clean the token from the address bar so it's not visible in browser history
-      const cleanUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState(null, "", cleanUrl);
-    }
+    persistAdminToken();
   }, []);
+  // Also persist immediately (sync) so useActor can read it on first render
+  persistAdminToken();
 
   // Add a timeout so loading never spins forever after login
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setLoadingTimedOut(true), 6000);
+    const timer = setTimeout(() => setLoadingTimedOut(true), 20000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -125,10 +142,11 @@ export function AdminPage() {
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
 
   // Show loading while initializing auth, building the actor, or checking admin status.
-  // Stop loading after 6 seconds regardless to prevent infinite spinner.
+  // Stop loading after 12 seconds regardless to prevent infinite spinner.
   const isLoading =
     !loadingTimedOut &&
-    (isInitializing || isAdminLoading || (isAuthenticated && isActorFetching));
+    (isInitializing ||
+      (isAuthenticated && (isActorFetching || isAdminLoading)));
 
   if (isLoading) {
     return <AdminLoading />;
@@ -216,39 +234,50 @@ function AdminLogin({
 }
 
 function AdminUnauthorized() {
-  const { identity } = useInternetIdentity();
-  const { actor } = useActor();
-  const [claiming, setClaiming] = useState(false);
+  const { clear } = useInternetIdentity();
+  const claimFirstAdmin = useClaimFirstAdmin();
+  const queryClient = useQueryClient();
   const [claimError, setClaimError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // adminAlreadyClaimed = true when claim was attempted but admin already exists
+  const adminAlreadyClaimed =
+    claimError !== null &&
+    (claimError.toLowerCase().includes("already") ||
+      claimError.toLowerCase().includes("already been claimed"));
 
   const handleClaim = async () => {
-    if (!actor || !identity || identity.getPrincipal().isAnonymous()) return;
-    setClaiming(true);
     setClaimError(null);
     try {
-      const result = await actor.claimFirstAdmin();
-      if (result) {
-        // Reload so isAdmin() re-evaluates with fresh actor state
+      const success = await claimFirstAdmin.mutateAsync();
+      if (success) {
         window.location.reload();
       } else {
         setClaimError(
-          "Could not claim admin. An admin may already be assigned. Please contact support.",
+          "Admin access has already been claimed. If you are Minakshi, you may be signed in with a different Internet Identity than the one originally used.",
         );
       }
-    } catch (e: unknown) {
+    } catch {
       setClaimError(
-        e instanceof Error ? e.message : "Failed to claim admin access.",
+        "Admin access has already been claimed. If you are Minakshi, you may be signed in with a different Internet Identity than the one originally used.",
       );
-    } finally {
-      setClaiming(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ["isAdmin"] });
+    setTimeout(() => setIsRefreshing(false), 1500);
   };
 
   const handleSignOut = () => {
     try {
       sessionStorage.removeItem("caffeineAdminToken");
     } catch {}
-    window.location.reload();
+    clear();
+    setTimeout(() => {
+      window.location.href = window.location.pathname;
+    }, 400);
   };
 
   return (
@@ -261,46 +290,127 @@ function AdminUnauthorized() {
         <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
           <Shield className="w-8 h-8 text-gold" />
         </div>
-        <h1 className="font-display text-3xl text-cream mb-3">Access Denied</h1>
+        <h1 className="font-display text-3xl text-cream mb-3">Admin Access</h1>
         <div className="gold-divider w-20 mx-auto mb-6" />
-        <p className="font-body text-cream/60 mb-6">
-          Your identity is not registered as admin. If you are Minakshi, click
-          below to claim admin access.
-        </p>
 
-        {claimError && (
-          <p
-            className="font-body text-destructive text-sm mb-6 bg-destructive/10 border border-destructive/25 rounded-sm px-4 py-3"
-            data-ocid="admin.claim.error_state"
-          >
-            {claimError}
-          </p>
+        {adminAlreadyClaimed ? (
+          /* Admin already exists — show the "wrong identity" explanation */
+          <div className="space-y-6">
+            <div
+              className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left space-y-3"
+              data-ocid="admin.claim.error_state"
+            >
+              <p className="font-body text-cream/80 text-sm leading-relaxed">
+                Admin access for this site is already set up.
+              </p>
+              <p className="font-body text-cream/65 text-sm leading-relaxed">
+                If you are Minakshi, you may be signed in with a{" "}
+                <span className="text-gold">different Internet Identity</span>{" "}
+                than the one originally used to claim admin.
+              </p>
+              <p className="font-body text-cream/65 text-sm leading-relaxed">
+                Please sign out and sign back in with the{" "}
+                <span className="text-gold font-medium">
+                  same Internet Identity
+                </span>{" "}
+                (fingerprint/device) you used the very first time you accessed
+                this admin panel.
+              </p>
+            </div>
+
+            <Button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              data-ocid="admin.refresh.button"
+              variant="ghost"
+              className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-gold/70 hover:text-gold hover:bg-gold/5 border border-gold/20 inline-flex items-center justify-center gap-2 mb-2"
+            >
+              {isRefreshing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Checking…
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Re-check Admin Status
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={handleSignOut}
+              variant="ghost"
+              data-ocid="admin.signout.secondary_button"
+              className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/50 hover:text-cream hover:bg-cream/5"
+            >
+              Sign Out &amp; Use Different Identity
+            </Button>
+          </div>
+        ) : (
+          /* First visit — offer to claim */
+          <div className="space-y-4">
+            <p className="font-body text-cream/60 mb-2">
+              If you are Minakshi, click below to claim admin access. This only
+              works once — the first person to claim becomes the permanent
+              admin.
+            </p>
+
+            {claimError && (
+              <div
+                className="bg-destructive/10 border border-destructive/30 rounded-sm p-4 text-destructive text-sm font-body text-left"
+                data-ocid="admin.claim.error_state"
+              >
+                {claimError}
+              </div>
+            )}
+
+            <Button
+              onClick={handleClaim}
+              disabled={claimFirstAdmin.isPending}
+              data-ocid="admin.claim.primary_button"
+              className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
+            >
+              {claimFirstAdmin.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Claiming…
+                </>
+              ) : (
+                "Claim Admin Access"
+              )}
+            </Button>
+
+            <Button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              data-ocid="admin.refresh.button"
+              variant="ghost"
+              className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-gold/70 hover:text-gold hover:bg-gold/5 border border-gold/20 inline-flex items-center justify-center gap-2"
+            >
+              {isRefreshing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Checking…
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Re-check Admin Status
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={handleSignOut}
+              variant="ghost"
+              data-ocid="admin.signout.secondary_button"
+              className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/50 hover:text-cream hover:bg-cream/5"
+            >
+              Sign Out
+            </Button>
+          </div>
         )}
-
-        <Button
-          onClick={handleClaim}
-          disabled={claiming || !actor}
-          data-ocid="admin.claim.primary_button"
-          className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none mb-3 inline-flex items-center justify-center gap-2"
-        >
-          {claiming ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Claiming…
-            </>
-          ) : (
-            "Claim Admin Access"
-          )}
-        </Button>
-
-        <Button
-          onClick={handleSignOut}
-          variant="ghost"
-          data-ocid="admin.signout.secondary_button"
-          className="w-full text-cream/40 hover:text-cream/70 text-sm font-body tracking-wide"
-        >
-          Sign in with a different identity
-        </Button>
       </div>
     </div>
   );
@@ -1097,6 +1207,7 @@ function CouponsTab() {
   const [couponCode, setCouponCode] = useState("");
   const [discountPct, setDiscountPct] = useState("");
   const [maxUsage, setMaxUsage] = useState("");
+  const [onePerPerson, setOnePerPerson] = useState(true);
 
   const handleCreateCoupon = async () => {
     if (!couponCode || !discountPct || !maxUsage) return;
@@ -1109,19 +1220,36 @@ function CouponsTab() {
       Number.isNaN(max) ||
       max < 1
     ) {
-      toast.error("Please enter valid discount (0–100) and max usage (≥1).");
+      toast.error("Please enter valid discount (0–100) and max uses (≥1).");
       return;
     }
     try {
+      const code = couponCode.trim().toUpperCase();
       await createCoupon.mutateAsync({
-        code: couponCode.trim().toUpperCase(),
+        code,
         discountPercent: BigInt(pct),
         maxUsage: BigInt(max),
       });
+      // Store the "1 per person" setting in localStorage alongside the coupon
+      if (onePerPerson) {
+        try {
+          const perPersonCoupons: string[] = JSON.parse(
+            localStorage.getItem("dujyoti_per_person_coupons") ?? "[]",
+          );
+          if (!perPersonCoupons.includes(code)) {
+            perPersonCoupons.push(code);
+            localStorage.setItem(
+              "dujyoti_per_person_coupons",
+              JSON.stringify(perPersonCoupons),
+            );
+          }
+        } catch {}
+      }
       toast.success("Coupon created.");
       setCouponCode("");
       setDiscountPct("");
       setMaxUsage("");
+      setOnePerPerson(true);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to create coupon.");
     }
@@ -1196,19 +1324,46 @@ function CouponsTab() {
               className="text-cream/70 font-body text-sm tracking-wide"
               htmlFor="maxUsage"
             >
-              Max Usage
+              Total Redemption Limit
             </Label>
             <Input
               id="maxUsage"
               type="number"
               min="1"
               data-ocid="admin.coupon.maxusage.input"
-              placeholder="e.g. 50"
+              placeholder="e.g. 100"
               value={maxUsage}
               onChange={(e) => setMaxUsage(e.target.value)}
               className="bg-card/60 border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body"
             />
+            <p className="text-cream/35 font-body text-xs">
+              How many times this code can be used in total across ALL clients.
+              E.g. set 50 if you want 50 different people to use it.
+            </p>
           </div>
+        </div>
+        {/* 1 per person toggle */}
+        <div className="mt-4 space-y-1">
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="onePerPerson"
+              data-ocid="admin.coupon.perperson.checkbox"
+              checked={onePerPerson}
+              onChange={(e) => setOnePerPerson(e.target.checked)}
+              className="w-4 h-4 accent-gold cursor-pointer"
+            />
+            <label
+              htmlFor="onePerPerson"
+              className="font-body text-sm text-cream/70 cursor-pointer select-none"
+            >
+              Limit to 1 use per email address
+            </label>
+          </div>
+          <p className="text-cream/35 font-body text-xs ml-7">
+            When checked, each client's email can only use this code once — even
+            if the total limit hasn't been reached.
+          </p>
         </div>
         <div className="mt-5 flex justify-end">
           <Button
@@ -1269,7 +1424,10 @@ function CouponsTab() {
                     Discount
                   </TableHead>
                   <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
-                    Usage
+                    Used / Total
+                  </TableHead>
+                  <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
+                    Per Person
                   </TableHead>
                   <TableHead className="text-gold/60 font-body text-xs tracking-wider uppercase">
                     Status
@@ -1294,6 +1452,32 @@ function CouponsTab() {
                     </TableCell>
                     <TableCell className="font-body text-cream/70 text-sm">
                       {Number(coupon.usageCount)} / {Number(coupon.maxUsage)}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        try {
+                          const perPersonCoupons: string[] = JSON.parse(
+                            localStorage.getItem(
+                              "dujyoti_per_person_coupons",
+                            ) ?? "[]",
+                          );
+                          return perPersonCoupons.includes(coupon.code) ? (
+                            <Badge className="bg-indigo-900/40 text-indigo-300 border border-indigo-500/30 font-body text-xs whitespace-nowrap">
+                              1 per person
+                            </Badge>
+                          ) : (
+                            <span className="text-cream/30 text-xs font-body">
+                              —
+                            </span>
+                          );
+                        } catch {
+                          return (
+                            <span className="text-cream/30 text-xs font-body">
+                              —
+                            </span>
+                          );
+                        }
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Badge

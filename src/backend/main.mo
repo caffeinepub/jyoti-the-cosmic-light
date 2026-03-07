@@ -1,4 +1,3 @@
-import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import List "mo:core/List";
 import Time "mo:core/Time";
@@ -10,7 +9,6 @@ import AccessControl "authorization/access-control";
 
 actor {
   let accessControlState = AccessControl.initState();
-  include MixinAuthorization(accessControlState);
 
   public type UserProfile = { name : Text };
   type AvailableSlot = { id : Nat; date : Text; time : Text; isBooked : Bool };
@@ -70,12 +68,15 @@ actor {
   let userReferralCode = Map.empty<Principal, Text>();
   let userAppliedReferral = Map.empty<Principal, Bool>();
 
+  // Track whether first admin has been claimed
+  var firstAdminClaimed = false;
+
   var nextSlotId = 1;
   var nextBookingId = 1;
   var nextRemedyId = 1;
-  var adminAssigned = false : Bool;
-  var firstAdminPrincipal : ?Principal = null;
   var nextReferralId = 1;
+
+  include MixinAuthorization(accessControlState);
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
@@ -106,6 +107,17 @@ actor {
       };
     };
     availableList.toArray();
+  };
+
+  public query ({ caller }) func getAllSlots() : async Result<[AvailableSlot], Text> {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      return #err("Unauthorized: Only admins can access all slots");
+    };
+    let slotsList = List.empty<AvailableSlot>();
+    for ((_, slot) in slots.entries()) {
+      slotsList.add(slot);
+    };
+    #ok(slotsList.toArray());
   };
 
   public query ({ caller = _ }) func getServiceFees() : async [ServiceFee] {
@@ -145,8 +157,8 @@ actor {
     question : Text,
     couponCode : ?Text
   ) : async Result<Booking, Text> {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      return #err("Unauthorized: Only users can book appointments");
+    if (caller.isAnonymous()) {
+      return #err("Unauthorized: Anonymous users cannot book appointments");
     };
 
     switch (slots.get(slotId)) {
@@ -427,28 +439,32 @@ actor {
   };
 
   public query ({ caller }) func isAdmin() : async Bool {
+    // Safe check that never traps - returns false for unregistered/anonymous users
     AccessControl.isAdmin(accessControlState, caller);
   };
 
   public shared ({ caller }) func claimFirstAdmin() : async Bool {
-    if (caller.isAnonymous()) { return false };
-    if (adminAssigned) { return false };
+    // Reject anonymous callers
+    if (caller.isAnonymous()) { 
+      return false;
+    };
 
-    AccessControl.assignRole(accessControlState, caller, caller, #admin);
-    adminAssigned := true;
-    firstAdminPrincipal := ?caller;
+    // Check if already claimed
+    if (firstAdminClaimed) {
+      return false;
+    };
+
+    // Mark as claimed and assign admin role
+    firstAdminClaimed := true;
+
+    // Directly update the userRoles map to register caller as admin
+    accessControlState.userRoles.add(caller, #admin);
+
     true;
   };
 
-  public shared ({ caller }) func forceClaimAdmin(userSecret : Text) : async Bool {
+  public shared ({ caller = _ }) func forceClaimAdmin(_userSecret : Text) : async Bool { 
     false;
-  };
-
-  private func isFirstAdmin(principal : Principal) : Bool {
-    switch (firstAdminPrincipal) {
-      case (?adminPrincipal) { principal == adminPrincipal };
-      case (null) { false };
-    };
   };
 
   public shared ({ caller }) func generateReferralCode() : async Result<Text, Text> {

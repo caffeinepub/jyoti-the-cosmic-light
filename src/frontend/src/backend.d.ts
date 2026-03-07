@@ -27,6 +27,13 @@ export type Result_6 = {
     __kind__: "err";
     err: string;
 };
+export type Result_13 = {
+    __kind__: "ok";
+    ok: AvailableSlot;
+} | {
+    __kind__: "err";
+    err: string;
+};
 export interface Coupon {
     active: boolean;
     code: string;
@@ -43,14 +50,14 @@ export type Result_5 = {
 };
 export type Result_9 = {
     __kind__: "ok";
-    ok: Booking;
+    ok: string;
 } | {
     __kind__: "err";
     err: string;
 };
 export type Result_12 = {
     __kind__: "ok";
-    ok: AvailableSlot;
+    ok: Array<[Principal, bigint]>;
 } | {
     __kind__: "err";
     err: string;
@@ -76,7 +83,7 @@ export type Result_4 = {
 };
 export type Result_11 = {
     __kind__: "ok";
-    ok: Array<[Principal, bigint]>;
+    ok: Array<Referral>;
 } | {
     __kind__: "err";
     err: string;
@@ -105,14 +112,14 @@ export type Result_3 = {
 };
 export type Result_10 = {
     __kind__: "ok";
-    ok: Array<Referral>;
+    ok: Booking;
 } | {
     __kind__: "err";
     err: string;
 };
 export type Result_8 = {
     __kind__: "ok";
-    ok: string;
+    ok: Array<AvailableSlot>;
 } | {
     __kind__: "err";
     err: string;
@@ -161,20 +168,21 @@ export enum UserRole {
 }
 export interface backendInterface {
     addRemedy(bookingId: bigint, clientName: string, title: string, content: string): Promise<Result_1>;
-    addSlot(date: string, time: string): Promise<Result_12>;
-    adminGetAllCoinBalances(): Promise<Result_11>;
-    adminGetAllReferrals(): Promise<Result_10>;
-    applyReferralCode(code: string): Promise<Result_8>;
+    addSlot(date: string, time: string): Promise<Result_13>;
+    adminGetAllCoinBalances(): Promise<Result_12>;
+    adminGetAllReferrals(): Promise<Result_11>;
+    applyReferralCode(code: string): Promise<Result_9>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    bookAppointment(clientName: string, email: string, service: string, slotId: bigint, dob: string, tob: string, birthPlace: string, lat: number, lng: number, gender: string, question: string, couponCode: string | null): Promise<Result_9>;
+    bookAppointment(clientName: string, email: string, service: string, slotId: bigint, dob: string, tob: string, birthPlace: string, lat: number, lng: number, gender: string, question: string, couponCode: string | null): Promise<Result_10>;
     cancelBooking(id: bigint): Promise<Result_2>;
     claimFirstAdmin(): Promise<boolean>;
     createCoupon(code: string, discountPercent: bigint, maxUsage: bigint): Promise<Result>;
     deleteCoupon(code: string): Promise<Result_2>;
     deleteRemedy(id: bigint): Promise<Result_2>;
-    forceClaimAdmin(userSecret: string): Promise<boolean>;
-    generateReferralCode(): Promise<Result_8>;
+    forceClaimAdmin(_userSecret: string): Promise<boolean>;
+    generateReferralCode(): Promise<Result_9>;
     getAllRemedies(): Promise<Result_6>;
+    getAllSlots(): Promise<Result_8>;
     getAvailableSlots(): Promise<Array<AvailableSlot>>;
     getBookings(): Promise<Result_7>;
     getCallerUserProfile(): Promise<UserProfile | null>;

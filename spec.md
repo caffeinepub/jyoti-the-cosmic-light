@@ -1,19 +1,60 @@
 # दूjyoti — The Cosmic Light
 
 ## Current State
-Full spiritual astrology website with homepage, booking system, admin panel with availability, bookings, fees, coupons, and remedies tabs. Admin authentication uses Internet Identity + a `claimFirstAdmin` backend function. The bug: `claimFirstAdmin` stores the caller principal in a separate variable but never registers it in the `AccessControl` module's `userRoles` map. As a result, after claiming admin, all admin-guarded actions fail with "Unauthorized: Only admins can do this."
+
+A spiritual astrology website with:
+- Homepage with all brand sections
+- 3-step booking flow (service → date/time → details) that confirms bookings directly in the backend with no payment gate
+- Admin panel with availability, bookings, fees, coupons, remedies, and referral coins tabs
+- Stripe component is installed but not wired to the booking flow
+- Reviews page
 
 ## Requested Changes (Diff)
 
 ### Add
-- Nothing new
+- UPI payment step integrated into booking flow using Stripe Checkout (Stripe supports UPI for Indian merchant accounts)
+- Backend: `createBookingPaymentSession` — creates a "pending" booking + Stripe Checkout session (UPI + card), returns Stripe URL
+- Backend: `verifyBookingPayment` — given a Stripe session_id, verifies payment succeeded and confirms the booking
+- Backend: `cancelPendingBooking` — cancels a pending booking if payment was abandoned
+- New booking status values: `"pending_payment"`, `"confirmed"`, `"cancelled"`
+- Payment step (Step 3 → Step 4): After filling details, client clicks "Proceed to Payment" → redirected to Stripe Checkout
+- Post-payment return page (`/book?payment_success=true&session_id=...`) that verifies payment and shows confirmation
+- Payment cancelled page (`/book?payment_cancelled=true`) that shows a retry option
 
 ### Modify
-- `claimFirstAdmin` backend function: must directly register the caller as `#admin` in `accessControlState.userRoles` and set `accessControlState.adminAssigned = true`, so that `AccessControl.isAdmin()` returns `true` for that caller on all subsequent calls.
+- `bookAppointment` in backend: replaced by `createBookingPaymentSession` (creates pending booking + Stripe session)
+- BookingPage.tsx: "Confirm Booking" button now says "Proceed to Payment" and redirects to Stripe instead of directly confirming
+- BookingPage.tsx: On return from Stripe with `?payment_success=true&session_id=...`, call `verifyBookingPayment` and show confirmation
+- STEPS array: add "Payment" as step 4 label in the stepper (visually)
+- Admin bookings table: show `pending_payment` / `confirmed` / `cancelled` badges with colors
 
 ### Remove
-- The redundant `firstAdminPrincipal` and `adminAssigned` local variables (or keep them but ensure the AccessControl state is the source of truth for all permission checks)
+- Direct `bookAppointment` call from the frontend (replaced by payment flow)
 
 ## Implementation Plan
-1. Regenerate the Motoko backend with a corrected `claimFirstAdmin` that writes directly into `accessControlState.userRoles` with role `#admin` and sets `accessControlState.adminAssigned := true`, so all `AccessControl.isAdmin()` checks pass after claiming.
-2. No frontend changes needed — the existing flow (sign in → "Set Me As Admin" button → dashboard) is correct; only the backend registration is broken.
+
+1. Update `main.mo`:
+   - Add Stripe configuration (uses `StripeConfig` from stripe.mo module)
+   - Add `createBookingPaymentSession(clientName, email, service, slotId, dob, tob, birthPlace, lat, lng, gender, question, couponCode)` → creates pending booking, calls Stripe.createCheckoutSession with UPI+card enabled, returns `Result<{bookingId: Nat; checkoutUrl: Text}, Text>`
+   - Add `verifyBookingPayment(sessionId: Text)` → calls Stripe.getSessionStatus, if completed → sets booking status to "confirmed" and marks slot as booked, returns `Result<Booking, Text>`
+   - Add `cancelPendingBooking(bookingId: Nat)` → sets status to "cancelled" (for abandoned payments)
+   - Keep existing `bookAppointment` for backward compatibility but add new payment-gated functions
+   - Stripe config: admin can set stripe secret key via `setStripeKey(key: Text)` (admin only)
+
+2. Update `backend.d.ts` with new types and method signatures
+
+3. Update `BookingPage.tsx`:
+   - Step 2 → "Your Details" form remains but submit button changes to "Proceed to Payment (₹X)"  
+   - On submit: call `createBookingPaymentSession` → redirect window to checkoutUrl
+   - On page load: check URL params for `payment_success=true` + `session_id` → call `verifyBookingPayment` → show confirmation
+   - On page load: check URL params for `payment_cancelled=true` → show "Payment was not completed" with retry button
+
+4. Update `useQueries.ts`:
+   - Add `useCreateBookingPaymentSession` mutation
+   - Add `useVerifyBookingPayment` mutation
+   - Add `useCancelPendingBooking` mutation
+   - Add `useSetStripeKey` mutation
+
+5. Update `AdminPage.tsx`:
+   - Add "Stripe Setup" section in Settings or a new tab where admin pastes Stripe secret key
+   - Show payment status badges for bookings (pending_payment / confirmed / cancelled)
