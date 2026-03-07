@@ -161,9 +161,9 @@ export function HomePage() {
           </p>
 
           <p className="font-body text-base sm:text-lg text-cream/65 mb-12 leading-relaxed max-w-xl mx-auto">
-            दूjyoti is a space rooted in Vedic wisdom where astrology is
-            approached as a tool for self-understanding, inner clarity, and
-            alignment with life.
+            दूjyoti a space rooted in Vedic wisdom where astrology is approached
+            as a tool for self-understanding, inner clarity, and alignment with
+            life.
           </p>
 
           <Link to="/book">
@@ -397,7 +397,7 @@ export function HomePage() {
                 <div className="absolute inset-0 rounded-full border-2 border-gold/40 animate-pulse-gold" />
                 <div className="absolute inset-2 rounded-full border border-gold/20" />
                 <img
-                  src="/assets/generated/minakshi-portrait.dim_400x400.jpg"
+                  src="/assets/uploads/WhatsApp-Image-2026-01-17-at-2.28.09-PM-1.jpeg"
                   alt="Minakshi — Vedic Astrologer"
                   className="w-full h-full rounded-full object-cover border-2 border-gold/30"
                   style={{ filter: "brightness(0.95) saturate(0.9)" }}

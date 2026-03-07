@@ -21,19 +21,19 @@ const SERVICES = [
   {
     id: "birth-chart",
     name: "Birth Chart Reading",
-    duration: "90 min",
+    duration: "45–60 min",
     desc: "A comprehensive reading of your natal chart — personality, strengths, and life direction.",
   },
   {
     id: "life-guidance",
     name: "Life Guidance Session",
-    duration: "75 min",
+    duration: "45–60 min",
     desc: "Focused consultation on career, relationships, or major life decisions.",
   },
   {
     id: "psychological",
     name: "Psychological Astrology",
-    duration: "90 min",
+    duration: "45–60 min",
     desc: "Deep exploration of mind patterns and recurring behavioral tendencies.",
   },
 ];
@@ -282,6 +282,10 @@ export function BookingPage() {
             <h2 className="font-display text-2xl text-cream">
               Choose a Date & Time
             </h2>
+            <p className="font-body text-cream/45 text-sm -mt-2">
+              Available: Mon–Fri · 8:00 pm – 10:00 pm &nbsp;|&nbsp; Sat–Sun ·
+              10:00 am – 10:00 pm
+            </p>
 
             {slotsLoading ? (
               <div
