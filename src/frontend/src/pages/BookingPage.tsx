@@ -1416,7 +1416,7 @@ function ConfirmationScreen({
               {/* QR Code */}
               <div className="flex-shrink-0 bg-white rounded-sm p-2 shadow-lg">
                 <img
-                  src="/assets/generated/upi-qr-code.dim_300x350.png"
+                  src="/assets/uploads/WhatsApp-Image-2026-03-08-at-3.56.36-AM-1-1.jpeg"
                   alt="UPI QR Code for iamminakshi007@oksbi"
                   className="w-40 h-auto block"
                   data-ocid="booking.upi.qr_image"
