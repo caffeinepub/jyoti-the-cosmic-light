@@ -362,21 +362,21 @@ export function HomePage() {
           }}
         />
 
-        {/* Zodiac wheel */}
+        {/* Zodiac wheel — golden-blue celestial aesthetic */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <ZodiacWheel
             className="w-[min(90vw,700px)] text-gold"
-            opacity={0.15}
+            opacity={0.32}
             spinning={true}
           />
         </div>
 
-        {/* Radial glow */}
+        {/* Radial glow — deep indigo behind wheel for contrast */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "radial-gradient(ellipse 60% 50% at 50% 50%, oklch(0.25 0.08 280 / 0.25) 0%, transparent 65%)",
+              "radial-gradient(ellipse 55% 45% at 50% 50%, oklch(0.18 0.08 260 / 0.30) 0%, transparent 65%)",
           }}
         />
 
@@ -1078,7 +1078,10 @@ export function HomePage() {
       >
         {/* Background zodiac */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <ZodiacWheel className="w-[min(80vw,600px)] text-gold opacity-5" />
+          <ZodiacWheel
+            className="w-[min(80vw,600px)] text-gold"
+            opacity={0.12}
+          />
         </div>
 
         {/* Glow */}

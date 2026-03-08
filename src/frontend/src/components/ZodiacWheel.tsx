@@ -41,183 +41,369 @@ export function ZodiacWheel({
       aria-hidden="true"
     >
       <defs>
-        {/* Multi-layer golden glow filter */}
+        {/* ── Golden-Blue dual-tone glow — warm gold bloom over deep blue ── */}
         <filter id="zodiac-glow" x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="3.5" result="blur1" />
+          {/* Wide gold bloom */}
           <feGaussianBlur
-            stdDeviation="1.2"
-            result="blur2"
             in="SourceGraphic"
+            stdDeviation="4"
+            result="goldBlur"
           />
           <feColorMatrix
-            in="blur1"
+            in="goldBlur"
             type="matrix"
-            values="1.4 0.6 0 0 0.15
-                    0.8 0.9 0 0 0.05
-                    0   0   0 0 0
-                    0   0   0 1.2 0"
-            result="goldenBlur"
+            values="2.0 0.7 0   0 0.28
+                    1.2 1.0 0   0 0.12
+                    0   0   0.1 0 0
+                    0   0   0   1.5 0"
+            result="goldLayer"
+          />
+          {/* Deep blue bloom */}
+          <feGaussianBlur
+            in="SourceGraphic"
+            stdDeviation="6"
+            result="blueBlur"
+          />
+          <feColorMatrix
+            in="blueBlur"
+            type="matrix"
+            values="0   0.05 0.3 0 0.02
+                    0.1 0.2  0.8 0 0.06
+                    0.1 0.35 2.0 0 0.35
+                    0   0    0   0.8 0"
+            result="blueLayer"
           />
           <feMerge>
-            <feMergeNode in="goldenBlur" />
-            <feMergeNode in="blur2" />
+            <feMergeNode in="blueLayer" />
+            <feMergeNode in="goldLayer" />
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
 
-        {/* Text glow filter for zodiac names */}
-        <filter id="text-glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="2.5" result="blur" />
+        {/* ── Devanagari name glow — intense warm gold ── */}
+        <filter id="text-glow" x="-80%" y="-80%" width="260%" height="260%">
+          {/* Large outer gold halo */}
+          <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="halo" />
           <feColorMatrix
-            in="blur"
+            in="halo"
             type="matrix"
-            values="1.5 0.6 0 0 0.18
-                    0.9 0.9 0 0 0.06
+            values="2.2 0.8 0 0 0.30
+                    1.4 1.0 0 0 0.14
+                    0   0   0 0 0
+                    0   0   0 1.8 0"
+            result="outerGold"
+          />
+          {/* Tight inner glow */}
+          <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="inner" />
+          <feColorMatrix
+            in="inner"
+            type="matrix"
+            values="1.8 0.5 0 0 0.22
+                    1.0 0.9 0 0 0.08
                     0   0   0 0 0
                     0   0   0 1.4 0"
-            result="goldenTextGlow"
+            result="innerGold"
           />
-          <feMerge>
-            <feMergeNode in="goldenTextGlow" />
-            <feMergeNode in="goldenTextGlow" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-
-        {/* Intense center glow */}
-        <filter
-          id="zodiac-core-glow"
-          x="-60%"
-          y="-60%"
-          width="220%"
-          height="220%"
-        >
-          <feGaussianBlur stdDeviation="6" result="bigBlur" />
+          {/* Subtle blue shimmer beneath */}
+          <feGaussianBlur
+            in="SourceGraphic"
+            stdDeviation="3.5"
+            result="blueBase"
+          />
           <feColorMatrix
-            in="bigBlur"
+            in="blueBase"
             type="matrix"
-            values="1.6 0.5 0 0 0.2
-                    0.9 1.0 0 0 0.08
-                    0   0   0 0 0
-                    0   0   0 0.9 0"
-            result="goldenCore"
+            values="0   0.1 0.5 0 0.03
+                    0.1 0.2 0.9 0 0.05
+                    0.1 0.3 2.0 0 0.28
+                    0   0   0   0.6 0"
+            result="blueShimmer"
           />
           <feMerge>
-            <feMergeNode in="goldenCore" />
+            <feMergeNode in="blueShimmer" />
+            <feMergeNode in="outerGold" />
+            <feMergeNode in="innerGold" />
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
 
-        {/* Radial golden halo behind wheel */}
+        {/* ── Deep indigo-blue core glow for center hub ── */}
+        <filter
+          id="blue-core-glow"
+          x="-100%"
+          y="-100%"
+          width="300%"
+          height="300%"
+        >
+          <feGaussianBlur
+            in="SourceGraphic"
+            stdDeviation="10"
+            result="bigBlue"
+          />
+          <feColorMatrix
+            in="bigBlue"
+            type="matrix"
+            values="0   0.1 0.5 0 0.05
+                    0.1 0.3 1.2 0 0.10
+                    0.1 0.4 2.2 0 0.40
+                    0   0   0   0.9 0"
+            result="blueCore"
+          />
+          <feGaussianBlur
+            in="SourceGraphic"
+            stdDeviation="4"
+            result="nearGlow"
+          />
+          <feColorMatrix
+            in="nearGlow"
+            type="matrix"
+            values="0.2 0.1 0.6 0 0.05
+                    0.1 0.3 1.0 0 0.08
+                    0   0.3 2.0 0 0.32
+                    0   0   0   0.7 0"
+            result="nearBlue"
+          />
+          <feMerge>
+            <feMergeNode in="blueCore" />
+            <feMergeNode in="nearBlue" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        {/* ── Outer ring golden-blue dual halo ── */}
+        <filter
+          id="outer-ring-glow"
+          x="-25%"
+          y="-25%"
+          width="150%"
+          height="150%"
+        >
+          {/* Gold outer glow */}
+          <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="gG" />
+          <feColorMatrix
+            in="gG"
+            type="matrix"
+            values="1.8 0.5 0.1 0 0.18
+                    1.0 0.9 0.3 0 0.08
+                    0.1 0.2 0.5 0 0.05
+                    0   0   0   1.3 0"
+            result="goldRing"
+          />
+          {/* Blue inner rim shimmer */}
+          <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="bG" />
+          <feColorMatrix
+            in="bG"
+            type="matrix"
+            values="0   0.1 0.4 0 0.03
+                    0.1 0.2 0.8 0 0.06
+                    0.1 0.3 1.8 0 0.25
+                    0   0   0   0.8 0"
+            result="blueRim"
+          />
+          <feMerge>
+            <feMergeNode in="blueRim" />
+            <feMergeNode in="goldRing" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        {/* ── Spoke glow — golden with blue shadow ── */}
+        <filter id="spoke-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur
+            in="SourceGraphic"
+            stdDeviation="1.5"
+            result="sBlur"
+          />
+          <feColorMatrix
+            in="sBlur"
+            type="matrix"
+            values="1.6 0.4 0.1 0 0.15
+                    0.9 0.8 0.2 0 0.07
+                    0.1 0.1 0.3 0 0.02
+                    0   0   0   1.2 0"
+            result="spkGold"
+          />
+          <feMerge>
+            <feMergeNode in="spkGold" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        {/* ── Radial background halo — golden center to deep blue edge ── */}
         <radialGradient id="wheel-halo" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#f5c842" stopOpacity="0.22" />
-          <stop offset="40%" stopColor="#d4a017" stopOpacity="0.10" />
-          <stop offset="75%" stopColor="#b8860b" stopOpacity="0.04" />
-          <stop offset="100%" stopColor="#b8860b" stopOpacity="0" />
+          <stop offset="0%" stopColor="#FFD700" stopOpacity="0.08" />
+          <stop offset="30%" stopColor="#1565C0" stopOpacity="0.10" />
+          <stop offset="60%" stopColor="#0d47a1" stopOpacity="0.12" />
+          <stop offset="85%" stopColor="#1a237e" stopOpacity="0.08" />
+          <stop offset="100%" stopColor="#0a0d1f" stopOpacity="0" />
         </radialGradient>
 
-        {/* Gold stroke color */}
-        <style>{`
-          .zodiac-gold { color: #f5c842; }
-        `}</style>
+        {/* ── Outer ambient — blue inside, gold lip at edge ── */}
+        <radialGradient id="outer-ambient" cx="50%" cy="50%" r="50%">
+          <stop offset="55%" stopColor="#1a237e" stopOpacity="0" />
+          <stop offset="72%" stopColor="#1565C0" stopOpacity="0.10" />
+          <stop offset="86%" stopColor="#FFD700" stopOpacity="0.20" />
+          <stop offset="100%" stopColor="#FFC107" stopOpacity="0.08" />
+        </radialGradient>
+
+        {/* ── Even segment fill — deep royal blue ── */}
+        <linearGradient id="seg-even" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#1565C0" stopOpacity="0.14" />
+          <stop offset="100%" stopColor="#0d47a1" stopOpacity="0.06" />
+        </linearGradient>
+
+        {/* ── Odd segment fill — warm gold ── */}
+        <linearGradient id="seg-odd" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#FFD700" stopOpacity="0.10" />
+          <stop offset="100%" stopColor="#FFC107" stopOpacity="0.04" />
+        </linearGradient>
+
+        {/* ── Center hub gradient — deep blue core with gold fringe ── */}
+        <radialGradient id="hub-gradient" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#FFF8DC" stopOpacity="1.0" />
+          <stop offset="30%" stopColor="#FFD700" stopOpacity="0.9" />
+          <stop offset="65%" stopColor="#1565C0" stopOpacity="0.85" />
+          <stop offset="100%" stopColor="#0d47a1" stopOpacity="0.80" />
+        </radialGradient>
       </defs>
 
-      {/* ── Radial halo glow behind wheel ── */}
-      <circle cx={cx} cy={cy} r={195} fill="url(#wheel-halo)" />
+      {/* ── Background atmosphere ── */}
+      <circle cx={cx} cy={cy} r={198} fill="url(#wheel-halo)" />
+      <circle cx={cx} cy={cy} r={195} fill="url(#outer-ambient)" />
 
-      {/* ── Outer ambient ring pulse ── */}
+      {/* ── Outer pulse rings — alternating blue and gold ── */}
       <circle
         cx={cx}
         cy={cy}
-        r={185}
+        r={191}
         fill="none"
-        stroke="#f5c842"
-        strokeWidth="0.6"
-        opacity="0.18"
-        filter="url(#zodiac-core-glow)"
+        stroke="#1565C0"
+        strokeWidth="1.2"
+        opacity="0.28"
+        filter="url(#blue-core-glow)"
+      />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={188}
+        fill="none"
+        stroke="#FFD700"
+        strokeWidth="0.8"
+        opacity="0.45"
+        filter="url(#outer-ring-glow)"
+      />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={184}
+        fill="none"
+        stroke="#42A5F5"
+        strokeWidth="0.4"
+        opacity="0.30"
       />
 
-      {/* ── Main wheel group with glow ── */}
-      <g filter="url(#zodiac-glow)" stroke="#f5c842" fill="#f5c842">
-        {/* Decorative outer ring (double-ring effect) */}
+      {/* ── Main wheel group with dual glow ── */}
+      <g filter="url(#zodiac-glow)">
+        {/* Decorative outer trim — bright gold */}
         <circle
           cx={cx}
           cy={cy}
           r={outerDecorR}
           fill="none"
-          stroke="#f5c842"
-          strokeWidth="0.5"
-          opacity="0.55"
+          stroke="#FFD700"
+          strokeWidth="0.7"
+          opacity="0.60"
         />
 
-        {/* Outer ring */}
+        {/* Primary outer ring — luminous gold */}
         <circle
           cx={cx}
           cy={cy}
           r={r}
           fill="none"
-          stroke="#f5c842"
-          strokeWidth="1.2"
-          opacity="0.9"
+          stroke="#FFC107"
+          strokeWidth="2.0"
+          opacity="0.95"
         />
 
-        {/* Mid ring */}
+        {/* Secondary outer ring — blue shimmer inside gold */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r - 3}
+          fill="none"
+          stroke="#42A5F5"
+          strokeWidth="0.5"
+          opacity="0.35"
+        />
+
+        {/* Mid ring — transitional indigo-blue */}
         <circle
           cx={cx}
           cy={cy}
           r={midR}
           fill="none"
-          stroke="#f5c842"
-          strokeWidth="0.4"
-          opacity="0.45"
+          stroke="#1565C0"
+          strokeWidth="0.8"
+          opacity="0.65"
         />
 
-        {/* Inner ring */}
+        {/* Inner ring — deep royal blue */}
         <circle
           cx={cx}
           cy={cy}
           r={innerR}
           fill="none"
-          stroke="#f5c842"
-          strokeWidth="0.7"
-          opacity="0.75"
+          stroke="#0d47a1"
+          strokeWidth="1.2"
+          opacity="0.80"
         />
 
-        {/* Core rings */}
+        {/* Inner gold accent ring */}
         <circle
           cx={cx}
           cy={cy}
-          r={90}
+          r={innerR + 3}
           fill="none"
-          stroke="#f5c842"
+          stroke="#FFD700"
+          strokeWidth="0.4"
+          opacity="0.40"
+        />
+
+        {/* Core rings — deep blue */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={92}
+          fill="none"
+          stroke="#1565C0"
+          strokeWidth="0.8"
+          opacity="0.60"
+        />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={58}
+          fill="none"
+          stroke="#0d47a1"
           strokeWidth="0.6"
-          opacity="0.6"
+          opacity="0.55"
         />
         <circle
           cx={cx}
           cy={cy}
-          r={55}
+          r={24}
           fill="none"
-          stroke="#f5c842"
-          strokeWidth="0.5"
-          opacity="0.5"
-        />
-        <circle
-          cx={cx}
-          cy={cy}
-          r={20}
-          fill="none"
-          stroke="#f5c842"
-          strokeWidth="0.5"
-          opacity="0.5"
+          stroke="#1565C0"
+          strokeWidth="0.7"
+          opacity="0.50"
         />
 
-        {/* ── Alternate segment fills ── */}
+        {/* ── Segment fills — alternating royal blue / warm gold ── */}
         {ZODIAC_SIGNS.map(({ symbol }, i) => {
           const angle = (i * 30 - 90) * (Math.PI / 180);
           const nextAngle = ((i + 1) * 30 - 90) * (Math.PI / 180);
 
-          // Segment arc path between outerR and innerR
           const x1 = cx + r * Math.cos(angle);
           const y1 = cy + r * Math.sin(angle);
           const x2 = cx + r * Math.cos(nextAngle);
@@ -235,51 +421,55 @@ export function ZodiacWheel({
             "Z",
           ].join(" ");
 
+          // Even = royal blue, odd = warm gold
+          const fillColor = i % 2 === 0 ? "#1565C0" : "#FFD700";
+          const fillOpacity = i % 2 === 0 ? 0.12 : 0.07;
+
           return (
             <path
               key={`fill-${symbol}`}
               d={segPath}
-              fill="#f5c842"
-              opacity={i % 2 === 0 ? 0.07 : 0.03}
+              fill={fillColor}
+              opacity={fillOpacity}
             />
           );
         })}
 
-        {/* ── Spokes, symbols and names ── */}
+        {/* ── Spokes, symbols, and Devanagari names ── */}
         {ZODIAC_SIGNS.map(({ symbol, name }, i) => {
           const angle = (i * 30 - 90) * (Math.PI / 180);
           const nextAngle = ((i + 1) * 30 - 90) * (Math.PI / 180);
           const midAngle = angle + 15 * (Math.PI / 180);
 
-          // Spoke line (inner ring → outer ring)
+          // Spoke: inner ring → outer ring
           const x1 = cx + innerR * Math.cos(angle);
           const y1 = cy + innerR * Math.sin(angle);
           const x2 = cx + r * Math.cos(angle);
           const y2 = cy + r * Math.sin(angle);
 
-          // Diamond marker at spoke / outer ring intersection
+          // Diamond marker at outer ring spoke junction
           const dx = cx + r * Math.cos(angle);
           const dy = cy + r * Math.sin(angle);
-          const ds = 2.4; // half-size of diamond
+          const ds = 3.0;
 
-          // Symbol position (outer band)
+          // Symbol position in outer band
           const sx = cx + symbolR * Math.cos(midAngle);
           const sy = cy + symbolR * Math.sin(midAngle);
 
-          // Name position (inner band)
+          // Name position in inner band
           const nx = cx + nameR * Math.cos(midAngle);
           const ny = cy + nameR * Math.sin(midAngle);
 
-          // Rotation angle for name text (tangent to circle)
+          // Tangent rotation for Devanagari text
           const rotDeg = (i * 30 - 90 + 15) % 360;
 
-          // Arc path for outer segment border
+          // Arc segment border
           const arcX1 = cx + r * Math.cos(angle);
           const arcY1 = cy + r * Math.sin(angle);
           const arcX2 = cx + r * Math.cos(nextAngle);
           const arcY2 = cy + r * Math.sin(nextAngle);
 
-          // Diamond points (rotated 45°) at spoke/ring intersection
+          // Diamond shape at spoke/outer-ring junction
           const spokeDeg = i * 30 - 90;
           const diamondPath = `
             M ${dx + ds * Math.cos(((spokeDeg - 90) * Math.PI) / 180)} ${dy + ds * Math.sin(((spokeDeg - 90) * Math.PI) / 180)}
@@ -289,46 +479,57 @@ export function ZodiacWheel({
             Z
           `;
 
+          // Spokes: even = deep blue, odd = warm gold
+          const spokeColor = i % 2 === 0 ? "#42A5F5" : "#FFD700";
+          const spokeOpacity = i % 2 === 0 ? 0.55 : 0.8;
+
           return (
             <g key={symbol}>
+              {/* Spoke line — golden with blue shadow on even */}
               <line
                 x1={x1}
                 y1={y1}
                 x2={x2}
                 y2={y2}
-                stroke="#f5c842"
-                strokeWidth="0.6"
-                opacity="0.6"
+                stroke={spokeColor}
+                strokeWidth="0.9"
+                opacity={spokeOpacity}
+                filter="url(#spoke-glow)"
               />
+              {/* Arc segment border — gleaming gold */}
               <path
                 d={`M ${arcX1} ${arcY1} A ${r} ${r} 0 0 1 ${arcX2} ${arcY2}`}
                 fill="none"
-                stroke="#f5c842"
-                strokeWidth="0.6"
-                opacity="0.5"
+                stroke="#FFD700"
+                strokeWidth="0.7"
+                opacity="0.60"
               />
-              {/* Diamond marker at spoke/outer ring intersection */}
-              <path d={diamondPath} fill="#f5d060" opacity="0.9" />
-              {/* Zodiac symbol */}
+              {/* Diamond marker — bright gold over blue shimmer */}
+              <path d={diamondPath} fill="#42A5F5" opacity="0.50" />
+              <path d={diamondPath} fill="#FFE066" opacity="0.98" />
+              <path d={diamondPath} fill="#FFF8DC" opacity="0.60" />
+
+              {/* Zodiac symbol — warm brilliant gold */}
               <text
                 x={sx}
                 y={sy}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fontSize="11"
-                fill="#f5d060"
-                opacity="0.95"
+                fontSize="12"
+                fill="#FFD700"
+                opacity="0.98"
               >
                 {symbol}
               </text>
-              {/* Zodiac name in Devanagari — rotated along the ring, glowing */}
+
+              {/* Devanagari zodiac name — glowing gold radiance */}
               <text
                 x={nx}
                 y={ny}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fontSize="9.5"
-                fill="#fff8c0"
+                fontSize="10"
+                fill="#FFF8C0"
                 opacity="1"
                 transform={`rotate(${rotDeg}, ${nx}, ${ny})`}
                 fontFamily="serif"
@@ -340,51 +541,104 @@ export function ZodiacWheel({
           );
         })}
 
-        {/* ── Center star ── */}
+        {/* ── Center hub — deep indigo-blue with golden core ── */}
+        {/* Outer indigo radiance */}
         <circle
           cx={cx}
           cy={cy}
-          r={5}
-          fill="#f5d060"
-          opacity="0.95"
-          filter="url(#zodiac-core-glow)"
+          r={16}
+          fill="#0d47a1"
+          opacity="0.90"
+          filter="url(#blue-core-glow)"
         />
-        <circle cx={cx} cy={cy} r={2.5} fill="#fffbe0" opacity="1" />
-        {[0, 60, 120, 180, 240, 300].map((deg) => {
+        {/* Mid blue ring */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={11}
+          fill="#1565C0"
+          opacity="0.85"
+          filter="url(#blue-core-glow)"
+        />
+        {/* Inner blue core */}
+        <circle cx={cx} cy={cy} r={7} fill="#0d47a1" opacity="0.95" />
+        {/* Gold fringe ring */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={7.5}
+          fill="none"
+          stroke="#FFD700"
+          strokeWidth="1.0"
+          opacity="0.90"
+        />
+        {/* Bright gold center dot */}
+        <circle cx={cx} cy={cy} r={4} fill="#FFD700" opacity="1.0" />
+        {/* Pure white core point */}
+        <circle cx={cx} cy={cy} r={1.8} fill="#FFFDE7" opacity="1.0" />
+
+        {/* Center starburst rays — alternating gold and blue */}
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
           const a = deg * (Math.PI / 180);
+          const isCardinal = deg % 90 === 0;
           return (
             <line
               key={deg}
-              x1={cx + 5 * Math.cos(a)}
-              y1={cy + 5 * Math.sin(a)}
-              x2={cx + 18 * Math.cos(a)}
-              y2={cy + 18 * Math.sin(a)}
-              stroke="#f5c842"
-              strokeWidth="0.8"
-              opacity="0.85"
+              x1={cx + 6 * Math.cos(a)}
+              y1={cy + 6 * Math.sin(a)}
+              x2={cx + (isCardinal ? 26 : 20) * Math.cos(a)}
+              y2={cy + (isCardinal ? 26 : 20) * Math.sin(a)}
+              stroke={isCardinal ? "#FFD700" : "#42A5F5"}
+              strokeWidth={isCardinal ? "1.2" : "0.7"}
+              opacity={isCardinal ? "0.95" : "0.65"}
             />
           );
         })}
 
-        {/* ── Decorative star dots ── */}
+        {/* ── Decorative dot band — alternating gold / blue ── */}
         {Array.from({ length: 24 }, (_, i) => {
           const deg = i * 15;
-          const a = deg * (Math.PI / 180);
-          const dotR = i % 3 === 0 ? 106 : 104;
+          const a = (deg * Math.PI) / 180;
+          const dotR = i % 3 === 0 ? 107 : 105;
           const x = cx + dotR * Math.cos(a);
           const y = cy + dotR * Math.sin(a);
+          const isGold = i % 2 === 0;
           return (
             <circle
               key={`dot-${deg}`}
               cx={x}
               cy={y}
-              r={i % 4 === 0 ? 1.8 : 1.0}
-              fill="#f5d060"
-              opacity={i % 4 === 0 ? 0.9 : 0.6}
+              r={i % 4 === 0 ? 2.2 : 1.3}
+              fill={isGold ? "#FFD700" : "#42A5F5"}
+              opacity={i % 4 === 0 ? 0.95 : 0.7}
             />
           );
         })}
       </g>
+
+      {/* ── Outer golden rim highlight — rendered on top ── */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="none"
+        stroke="#FFD700"
+        strokeWidth="0.8"
+        opacity="0.55"
+        filter="url(#outer-ring-glow)"
+      />
+
+      {/* ── Blue aura fringe just inside gold rim ── */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r - 2}
+        fill="none"
+        stroke="#1565C0"
+        strokeWidth="0.4"
+        opacity="0.35"
+        filter="url(#blue-core-glow)"
+      />
     </svg>
   );
 }

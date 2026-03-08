@@ -646,6 +646,16 @@ function AdminUnauthorized({
 }
 
 function AdminDashboard() {
+  const { actor, isFetching: isActorFetching } = useActor();
+  const { identity, isInitializing } = useInternetIdentity();
+  const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
+
+  // Wait until the authenticated actor is ready before showing any tabs.
+  // This prevents "Not connected" errors when mutations fire before the actor is built.
+  if (isInitializing || isActorFetching || !actor || !isAuthenticated) {
+    return <AdminLoading />;
+  }
+
   return (
     <div
       className="min-h-screen pt-24 px-4 sm:px-6"
