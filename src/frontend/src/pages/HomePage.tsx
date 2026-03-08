@@ -817,11 +817,11 @@ export function HomePage() {
                 Reviews
               </Link>
               <a
-                href="mailto:dujyoti.minnakshi@gmail.com"
+                href="mailto:dujyoti.minakshi@gmail.com"
                 className="flex items-center gap-2 text-cream/50 hover:text-gold transition-colors"
               >
                 <Mail className="w-4 h-4" />
-                dujyoti.minnakshi@gmail.com
+                dujyoti.minakshi@gmail.com
               </a>
             </div>
           </div>

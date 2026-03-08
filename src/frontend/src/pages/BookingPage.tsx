@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Camera,
   CheckCircle2,
@@ -329,10 +330,23 @@ export function BookingPage() {
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponError, setCouponError] = useState("");
 
-  const { data: slots, isLoading: slotsLoading } = useAvailableSlots();
+  const queryClient = useQueryClient();
+  const {
+    data: slots,
+    isLoading: slotsLoading,
+    refetch: refetchSlots,
+  } = useAvailableSlots();
   const { data: serviceFees } = useServiceFees();
   const bookAppointment = useBookAppointment();
   const validateCoupon = useValidateCoupon();
+
+  // Force-refetch slots whenever the user reaches the date/time step
+  useEffect(() => {
+    if (step === 1) {
+      void refetchSlots();
+      queryClient.invalidateQueries({ queryKey: ["availableSlots"] });
+    }
+  }, [step, refetchSlots, queryClient]);
 
   // Group available slots by date
   const slotsByDate = (slots ?? [])
@@ -625,10 +639,10 @@ export function BookingPage() {
                 <p className="font-body text-cream/40 text-sm">
                   Please check back soon, or write to us directly at{" "}
                   <a
-                    href="mailto:dujyoti.minnakshi@gmail.com"
+                    href="mailto:dujyoti.minakshi@gmail.com"
                     className="text-gold underline"
                   >
-                    dujyoti.minnakshi@gmail.com
+                    dujyoti.minakshi@gmail.com
                   </a>
                 </p>
               </div>

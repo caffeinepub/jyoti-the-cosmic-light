@@ -96,6 +96,8 @@ import {
 const ADMIN_TAB_CLS =
   "data-[state=active]:bg-gold data-[state=active]:text-navy-deep font-body tracking-wider rounded-sm px-4 py-2 text-cream/60 text-sm";
 
+const ADMIN_PRINCIPAL_KEY = "dujyoti_admin_principal";
+
 export function AdminPage() {
   const { identity, login, loginStatus, isInitializing } =
     useInternetIdentity();
@@ -117,12 +119,48 @@ export function AdminPage() {
   // Determine if identity is a genuine authenticated (non-anonymous) principal
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
 
-  // Auto-attempt claimFirstAdmin when authenticated, actor ready, not admin yet
+  // ── Admin persistence: check localStorage cache ──────────────────
+  const currentPrincipal = isAuthenticated
+    ? identity.getPrincipal().toString()
+    : null;
+  const cachedAdminPrincipal = (() => {
+    try {
+      return localStorage.getItem(ADMIN_PRINCIPAL_KEY);
+    } catch {
+      return null;
+    }
+  })();
+  const isCachedAdmin =
+    !!cachedAdminPrincipal &&
+    !!currentPrincipal &&
+    cachedAdminPrincipal === currentPrincipal;
+
+  // When backend confirms admin, save principal to localStorage
+  useEffect(() => {
+    if (isAdminUser && currentPrincipal) {
+      try {
+        localStorage.setItem(ADMIN_PRINCIPAL_KEY, currentPrincipal);
+      } catch {}
+    }
+  }, [isAdminUser, currentPrincipal]);
+
+  // If backend comes back false but cache says admin → cache is stale, clear it
+  useEffect(() => {
+    if (!isAdminLoading && isAdminUser === false && isCachedAdmin) {
+      try {
+        localStorage.removeItem(ADMIN_PRINCIPAL_KEY);
+      } catch {}
+      window.location.reload();
+    }
+  }, [isAdminLoading, isAdminUser, isCachedAdmin]);
+
+  // Auto-attempt claimFirstAdmin when authenticated, actor ready, not admin yet, and no cache hit
   useEffect(() => {
     if (
       isAuthenticated &&
       actor &&
       !isAdminUser &&
+      !isCachedAdmin &&
       !autoClaimAttempted &&
       !isAdminLoading &&
       !isActorFetching
@@ -132,7 +170,13 @@ export function AdminPage() {
         .mutateAsync()
         .then((success) => {
           if (success) {
-            // Admin claim succeeded — reload so isAdmin() re-runs with the new role
+            // Save principal to localStorage BEFORE reload so the cache check
+            // works immediately on the next page load (II takes time to re-hydrate)
+            if (currentPrincipal) {
+              try {
+                localStorage.setItem(ADMIN_PRINCIPAL_KEY, currentPrincipal);
+              } catch {}
+            }
             window.location.reload();
           } else {
             // Admin slot already taken by a different identity
@@ -147,21 +191,29 @@ export function AdminPage() {
     isAuthenticated,
     actor,
     isAdminUser,
+    isCachedAdmin,
     autoClaimAttempted,
     isAdminLoading,
     isActorFetching,
     claimFirstAdmin,
+    currentPrincipal,
   ]);
 
   // Show loading while initializing auth, building the actor, or checking admin status.
-  // Stop loading after 20 seconds regardless to prevent infinite spinner.
+  // Stop loading after 8 seconds regardless to prevent infinite spinner.
+  // Also show loading when cache confirms admin but actor is still building (to avoid anonymous-actor calls).
   const isLoading =
     !loadingTimedOut &&
-    (isInitializing ||
-      (isAuthenticated && (isActorFetching || isAdminLoading)));
+    (isInitializing || isActorFetching || (isAuthenticated && isAdminLoading));
 
   if (isLoading) {
     return <AdminLoading />;
+  }
+
+  // ── If cache confirms this principal is admin, go straight to dashboard ──
+  // (still run isAdmin in the background to validate; handled by effects above)
+  if (isAuthenticated && isCachedAdmin) {
+    return <AdminDashboard />;
   }
 
   if (!isAuthenticated) {
@@ -175,6 +227,12 @@ export function AdminPage() {
         .mutateAsync()
         .then((success) => {
           if (success) {
+            // Save principal BEFORE reload so cache check passes immediately on next load
+            if (currentPrincipal) {
+              try {
+                localStorage.setItem(ADMIN_PRINCIPAL_KEY, currentPrincipal);
+              } catch {}
+            }
             window.location.reload();
           } else {
             setAutoClaimFailed(true);
@@ -224,11 +282,40 @@ function AdminLoading() {
 
 function AdminClaiming({ onManualClaim }: { onManualClaim: () => void }) {
   const [timedOut, setTimedOut] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [claimResult, setClaimResult] = useState<"success" | "failed" | null>(
+    null,
+  );
+  const { clear } = useInternetIdentity();
 
   useEffect(() => {
-    const timer = setTimeout(() => setTimedOut(true), 10000);
+    const timer = setTimeout(() => setTimedOut(true), 5000);
     return () => clearTimeout(timer);
   }, []);
+
+  const handleClaim = async () => {
+    setIsClaiming(true);
+    setClaimResult(null);
+    try {
+      await onManualClaim();
+      setClaimResult("success");
+    } catch {
+      setClaimResult("failed");
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
+  const handleSignOut = () => {
+    try {
+      localStorage.removeItem(ADMIN_PRINCIPAL_KEY);
+      sessionStorage.removeItem("caffeineAdminToken");
+    } catch {}
+    clear();
+    setTimeout(() => {
+      window.location.href = window.location.pathname;
+    }, 400);
+  };
 
   return (
     <div
@@ -241,8 +328,40 @@ function AdminClaiming({ onManualClaim }: { onManualClaim: () => void }) {
           <>
             <Loader2 className="w-8 h-8 text-gold animate-spin mx-auto mb-4" />
             <p className="font-body text-cream/60 text-sm tracking-wider">
-              Verifying admin access…
+              Setting up admin access…
             </p>
+          </>
+        ) : claimResult === "failed" ? (
+          <>
+            <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
+              <Shield className="w-8 h-8 text-gold" />
+            </div>
+            <h2 className="font-display text-2xl text-cream mb-3">
+              Admin Already Claimed
+            </h2>
+            <div className="gold-divider w-20 mx-auto mb-6" />
+            <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6 space-y-2">
+              <p className="font-body text-cream/70 text-sm leading-relaxed">
+                Admin access is registered to a different identity. To fix this:
+              </p>
+              <ol className="font-body text-cream/60 text-sm leading-relaxed list-decimal list-inside space-y-1">
+                <li>Click "Sign Out" below</li>
+                <li>Enter your Caffeine Admin Token on the login page</li>
+                <li>
+                  In the II popup, click{" "}
+                  <strong className="text-gold">"Create New"</strong> to create
+                  a fresh identity
+                </li>
+              </ol>
+            </div>
+            <Button
+              onClick={handleSignOut}
+              data-ocid="admin.signout.primary_button"
+              className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
+            >
+              <X className="w-4 h-4" />
+              Sign Out &amp; Start Over
+            </Button>
           </>
         ) : (
           <>
@@ -250,20 +369,37 @@ function AdminClaiming({ onManualClaim }: { onManualClaim: () => void }) {
               <Shield className="w-8 h-8 text-gold" />
             </div>
             <h2 className="font-display text-2xl text-cream mb-3">
-              Taking too long…
+              Claim Admin Access
             </h2>
             <div className="gold-divider w-20 mx-auto mb-6" />
             <p className="font-body text-cream/60 text-sm mb-8 leading-relaxed">
-              Verification is taking longer than expected. Click below to try
-              claiming admin access manually.
+              You are signed in. Click below to register yourself as the admin
+              of दूjyoti.
             </p>
             <Button
-              onClick={onManualClaim}
+              onClick={handleClaim}
+              disabled={isClaiming}
               data-ocid="admin.claim.primary_button"
               className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
             >
-              <RefreshCw className="w-4 h-4" />
-              Try Claiming Admin
+              {isClaiming ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Shield className="w-4 h-4" />
+              )}
+              {isClaiming ? "Claiming…" : "Claim Admin Access"}
+            </Button>
+            <p className="font-body text-cream/40 text-xs mt-4 leading-relaxed">
+              If this doesn't work, sign out and start over with your admin
+              token.
+            </p>
+            <Button
+              onClick={handleSignOut}
+              variant="ghost"
+              data-ocid="admin.signout.secondary_button"
+              className="mt-3 w-full py-2 tracking-widest uppercase text-xs rounded-none text-cream/40 hover:text-cream/70 hover:bg-cream/5 inline-flex items-center justify-center gap-2"
+            >
+              Sign Out &amp; Start Over
             </Button>
           </>
         )}
@@ -279,6 +415,40 @@ function AdminLogin({
   onLogin: () => void;
   loginStatus: string;
 }) {
+  const [token, setToken] = useState("");
+  const [tokenSaved, setTokenSaved] = useState(false);
+
+  // On mount, check if token is already in sessionStorage
+  useEffect(() => {
+    try {
+      const existing = sessionStorage.getItem("caffeineAdminToken");
+      if (existing) {
+        setToken(existing);
+        setTokenSaved(true);
+      }
+    } catch {}
+  }, []);
+
+  const handleSaveToken = () => {
+    const t = token.trim();
+    if (!t) return;
+    try {
+      sessionStorage.setItem("caffeineAdminToken", t);
+      setTokenSaved(true);
+    } catch {}
+  };
+
+  const handleLogin = () => {
+    // Ensure token is in sessionStorage before triggering II redirect
+    const t = token.trim();
+    if (t) {
+      try {
+        sessionStorage.setItem("caffeineAdminToken", t);
+      } catch {}
+    }
+    onLogin();
+  };
+
   return (
     <div
       className="min-h-screen flex items-center justify-center pt-24 px-6"
@@ -290,24 +460,75 @@ function AdminLogin({
         </div>
         <h1 className="font-display text-3xl text-cream mb-3">Admin Access</h1>
         <div className="gold-divider w-20 mx-auto mb-6" />
-        <p className="font-body text-cream/60 mb-8">
-          Please sign in with your Internet Identity to access the admin panel.
-        </p>
-        <Button
-          onClick={onLogin}
-          disabled={loginStatus === "logging-in"}
-          data-ocid="admin.login.primary_button"
-          className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none"
-        >
-          {loginStatus === "logging-in" ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              Signing in…
-            </>
-          ) : (
-            "Sign In with Internet Identity"
+
+        {/* Step 1: Token entry */}
+        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6">
+          <p className="font-body text-gold/70 text-xs tracking-widest uppercase mb-3">
+            Step 1 — Enter Admin Token
+          </p>
+          <p className="font-body text-cream/50 text-xs mb-3 leading-relaxed">
+            Find your token in the Caffeine builder dashboard (Settings or Admin
+            Token section). Paste it here before signing in.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              data-ocid="admin.token.input"
+              placeholder="Paste admin token here…"
+              value={token}
+              onChange={(e) => {
+                setToken(e.target.value);
+                setTokenSaved(false);
+              }}
+              className="bg-card/60 border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body text-sm flex-1"
+            />
+            <Button
+              onClick={handleSaveToken}
+              disabled={!token.trim() || tokenSaved}
+              data-ocid="admin.token.save_button"
+              variant="ghost"
+              className="border border-gold/30 text-gold hover:bg-gold/10 rounded-sm text-xs px-3 shrink-0"
+            >
+              {tokenSaved ? <Check className="w-4 h-4" /> : "Save"}
+            </Button>
+          </div>
+          {tokenSaved && (
+            <p className="font-body text-gold/60 text-xs mt-2 flex items-center gap-1">
+              <Check className="w-3 h-3" /> Token saved — ready to sign in
+            </p>
           )}
-        </Button>
+        </div>
+
+        {/* Step 2: Sign in */}
+        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6">
+          <p className="font-body text-gold/70 text-xs tracking-widest uppercase mb-3">
+            Step 2 — Sign In
+          </p>
+          <p className="font-body text-cream/50 text-xs mb-4 leading-relaxed">
+            Use fingerprint or Face ID. The token above will be used
+            automatically to register you as admin.
+          </p>
+          <Button
+            onClick={handleLogin}
+            disabled={loginStatus === "logging-in" || !token.trim()}
+            data-ocid="admin.login.primary_button"
+            className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none"
+          >
+            {loginStatus === "logging-in" ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Signing in…
+              </>
+            ) : (
+              "Sign In with Internet Identity"
+            )}
+          </Button>
+          {!token.trim() && (
+            <p className="font-body text-cream/40 text-xs mt-2 text-center">
+              Enter your admin token above first
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -316,7 +537,6 @@ function AdminLogin({
 function AdminUnauthorized({
   identity: identityProp,
   onRetry,
-  onManualClaim,
   isClaimPending,
 }: {
   identity: ReturnType<typeof useInternetIdentity>["identity"];
@@ -328,6 +548,11 @@ function AdminUnauthorized({
   const principal = identityProp?.getPrincipal().toString() ?? null;
 
   const handleSignOut = () => {
+    try {
+      localStorage.removeItem(ADMIN_PRINCIPAL_KEY);
+      // Clear any cached token so the login page shows fresh
+      sessionStorage.removeItem("caffeineAdminToken");
+    } catch {}
     clear();
     setTimeout(() => {
       window.location.href = window.location.pathname;
@@ -359,51 +584,60 @@ function AdminUnauthorized({
           </div>
         )}
 
-        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6">
-          <p className="font-body text-cream/80 text-sm leading-relaxed">
-            Your Internet Identity is not recognized as the admin. If you are
-            Minakshi, make sure you are signing in with the{" "}
-            <strong className="text-gold">same device and fingerprint</strong>{" "}
-            you used the very first time you set up this site.
+        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6 space-y-3">
+          <p className="font-body text-cream/80 text-sm leading-relaxed font-medium">
+            How to fix this:
           </p>
-          <p className="font-body text-cream/50 text-xs mt-3 leading-relaxed">
-            If this is your first time accessing the admin panel, click "Claim
-            Admin Access" below.
+          <ol className="font-body text-cream/60 text-sm leading-relaxed list-decimal list-inside space-y-2">
+            <li>
+              Click <strong className="text-cream/80">"Sign Out"</strong> below
+            </li>
+            <li>
+              On the login screen, paste your{" "}
+              <strong className="text-gold">Caffeine Admin Token</strong> and
+              click Save
+            </li>
+            <li>
+              Click{" "}
+              <strong className="text-cream/80">
+                "Sign In with Internet Identity"
+              </strong>
+            </li>
+            <li>
+              In the Internet Identity popup, click{" "}
+              <strong className="text-gold">"Create New"</strong> to create a
+              fresh identity — this becomes your permanent admin account
+            </li>
+          </ol>
+          <p className="font-body text-cream/40 text-xs mt-2 leading-relaxed">
+            Your Caffeine Admin Token is visible in the Caffeine builder
+            dashboard (Settings or the Admin Token section).
           </p>
         </div>
 
         <div className="space-y-3">
           <Button
-            onClick={onManualClaim}
-            disabled={isClaimPending}
-            data-ocid="admin.claim.primary_button"
+            onClick={handleSignOut}
+            data-ocid="admin.signout.primary_button"
             className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
           >
-            {isClaimPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Shield className="w-4 h-4" />
-            )}
-            {isClaimPending ? "Claiming…" : "Claim Admin Access"}
+            <X className="w-4 h-4" />
+            Sign Out &amp; Start Over
           </Button>
 
           <Button
             onClick={onRetry}
+            disabled={isClaimPending}
             data-ocid="admin.retry.secondary_button"
             variant="ghost"
             className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/60 hover:text-cream hover:bg-cream/5 border border-gold/20 inline-flex items-center justify-center gap-2"
           >
-            <RefreshCw className="w-4 h-4" />
-            Try Again
-          </Button>
-
-          <Button
-            onClick={handleSignOut}
-            variant="ghost"
-            data-ocid="admin.signout.secondary_button"
-            className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/60 hover:text-cream hover:bg-cream/5 inline-flex items-center justify-center gap-2"
-          >
-            Sign Out &amp; Try Different Identity
+            {isClaimPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            Re-check Status
           </Button>
         </div>
       </div>
@@ -760,6 +994,15 @@ function BookingsTab() {
     }
   };
 
+  const handleDelete = async (booking: Booking) => {
+    try {
+      await cancelBooking.mutateAsync(booking.id);
+      toast.success("Booking deleted.");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete booking.");
+    }
+  };
+
   return (
     <div className="card-cosmic rounded-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gold/15 flex items-center justify-between">
@@ -772,7 +1015,7 @@ function BookingsTab() {
           )}
         </h2>
         <div className="text-xs text-cream/40 font-body">
-          Notification email: dujyoti.minnakshi@gmail.com
+          Notification email: dujyoti.minakshi@gmail.com
         </div>
       </div>
 
@@ -827,7 +1070,7 @@ function BookingsTab() {
                     "Fee",
                     "Coupon",
                     "Status",
-                    "Action",
+                    "Actions",
                   ].map((h) => (
                     <TableHead
                       key={h}
@@ -903,43 +1146,86 @@ function BookingsTab() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {booking.status !== "cancelled" && (
+                      <div className="flex items-center gap-1">
+                        {booking.status !== "cancelled" && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                data-ocid={`admin.booking.cancel_button.${idx + 1}`}
+                                variant="ghost"
+                                size="sm"
+                                className="text-cream/40 hover:text-destructive hover:bg-destructive/10 text-xs font-body rounded-sm"
+                              >
+                                Cancel
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="bg-card border-gold/25">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="font-display text-cream">
+                                  Cancel this booking?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="font-body text-cream/60">
+                                  This will cancel {booking.clientName}'s
+                                  booking for {booking.slotDate} at{" "}
+                                  {booking.slotTime}. This cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel className="btn-gold-outline rounded-sm font-body">
+                                  Keep Booking
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleCancel(booking)}
+                                  className="bg-destructive text-destructive-foreground rounded-sm font-body"
+                                >
+                                  Cancel Booking
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                        {/* Delete button — available for ALL bookings */}
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button
-                              data-ocid={`admin.booking.cancel_button.${idx + 1}`}
+                              data-ocid={`admin.booking.delete_button.${idx + 1}`}
                               variant="ghost"
-                              size="sm"
-                              className="text-cream/40 hover:text-destructive hover:bg-destructive/10 text-xs font-body rounded-sm"
+                              size="icon"
+                              className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10"
+                              title="Delete booking"
                             >
-                              Cancel
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent className="bg-card border-gold/25">
                             <AlertDialogHeader>
                               <AlertDialogTitle className="font-display text-cream">
-                                Cancel this booking?
+                                Delete this booking?
                               </AlertDialogTitle>
                               <AlertDialogDescription className="font-body text-cream/60">
-                                This will cancel {booking.clientName}'s booking
-                                for {booking.slotDate} at {booking.slotTime}.
-                                This cannot be undone.
+                                This will permanently remove{" "}
+                                {booking.clientName}'s booking. This cannot be
+                                undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel className="btn-gold-outline rounded-sm font-body">
-                                Keep Booking
+                              <AlertDialogCancel
+                                data-ocid={`admin.booking.cancel_button.${idx + 1}`}
+                                className="btn-gold-outline rounded-sm font-body"
+                              >
+                                Keep
                               </AlertDialogCancel>
                               <AlertDialogAction
-                                onClick={() => handleCancel(booking)}
+                                data-ocid={`admin.booking.confirm_button.${idx + 1}`}
+                                onClick={() => handleDelete(booking)}
                                 className="bg-destructive text-destructive-foreground rounded-sm font-body"
                               >
-                                Cancel Booking
+                                Delete
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

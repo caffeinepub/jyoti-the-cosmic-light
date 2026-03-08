@@ -10,16 +10,18 @@ import type {
 import { useActor } from "./useActor";
 
 export function useAvailableSlots() {
-  const { actor, isFetching } = useActor();
+  const { actor } = useActor();
   return useQuery<AvailableSlot[]>({
     queryKey: ["availableSlots"],
     queryFn: async () => {
       if (!actor) return [];
       return actor.getAvailableSlots();
     },
-    enabled: !!actor && !isFetching,
+    // getAvailableSlots is a public query — no auth needed, use actor as soon as it exists
+    enabled: !!actor,
     staleTime: 0,
-    refetchOnMount: true,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
 
