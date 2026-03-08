@@ -116,6 +116,10 @@ export function AdminPage() {
   const [claimAttempted, setClaimAttempted] = useState(false);
   const [claimFailed, setClaimFailed] = useState(false);
 
+  // Timeout: if authenticated but stuck loading for 25+ seconds, bypass the loading gate
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Determine if identity is a genuine authenticated (non-anonymous) principal
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
 
@@ -154,6 +158,27 @@ export function AdminPage() {
       window.location.reload();
     }
   }, [isAdminLoading, isAdminUser, isCachedAdmin]);
+
+  // 25-second timeout: if authenticated, not cached, and still stuck — bypass loading gate
+  useEffect(() => {
+    if (isAuthenticated && !isCachedAdmin && !isAdminUser) {
+      loadingTimerRef.current = setTimeout(() => {
+        setLoadingTimedOut(true);
+      }, 25000);
+    } else {
+      if (loadingTimerRef.current) {
+        clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+      setLoadingTimedOut(false);
+    }
+    return () => {
+      if (loadingTimerRef.current) {
+        clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+    };
+  }, [isAuthenticated, isCachedAdmin, isAdminUser]);
 
   // Auto-attempt claimFirstAdmin as soon as actor is available and we haven't tried yet
   useEffect(() => {
@@ -205,7 +230,7 @@ export function AdminPage() {
     return <AdminLogin onLogin={login} loginStatus={loginStatus} />;
   }
 
-  // Cached admin — go straight to dashboard
+  // Cached admin — go straight to dashboard immediately (no waiting)
   if (isCachedAdmin) {
     return <AdminDashboard />;
   }
@@ -215,8 +240,8 @@ export function AdminPage() {
     return <AdminDashboard />;
   }
 
-  // Still loading admin status or waiting for actor
-  if (isAdminLoading || (!claimAttempted && !actor)) {
+  // Still loading admin status or waiting for actor — but only up to 20s, then fall through
+  if ((isAdminLoading || (!claimAttempted && !actor)) && !loadingTimedOut) {
     return <AdminLoading />;
   }
 
@@ -229,13 +254,19 @@ export function AdminPage() {
         onRetry={() => {
           setClaimAttempted(false);
           setClaimFailed(false);
+          setLoadingTimedOut(false);
         }}
       />
     );
   }
 
-  // Claim in progress or not yet started (actor not ready yet)
-  return <AdminClaiming isPending={claimFirstAdmin.isPending} />;
+  // Claim in progress or not yet started (actor not ready yet) — with timeout UI
+  return (
+    <AdminClaiming
+      isPending={claimFirstAdmin.isPending}
+      isTimedOut={loadingTimedOut && !actor}
+    />
+  );
 }
 
 // ── Sub-components ──────────────────────────────────────────────────
@@ -252,7 +283,22 @@ function AdminLoading() {
   );
 }
 
-function AdminClaiming({ isPending }: { isPending: boolean }) {
+function AdminClaiming({
+  isPending,
+  isTimedOut,
+}: {
+  isPending: boolean;
+  isTimedOut: boolean;
+}) {
+  // Local 20-second timeout — if still spinning, show extended message
+  const [showExtendedMsg, setShowExtendedMsg] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShowExtendedMsg(true), 20000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const timedOutState = isTimedOut || showExtendedMsg;
+
   return (
     <div
       className="min-h-screen flex items-center justify-center px-6"
@@ -264,15 +310,39 @@ function AdminClaiming({ isPending }: { isPending: boolean }) {
           <Shield className="w-8 h-8 text-gold" />
         </div>
         <h2 className="font-display text-2xl text-cream mb-3">
-          {isPending ? "Setting up admin access…" : "Verifying identity…"}
+          {timedOutState
+            ? "Taking longer than usual…"
+            : isPending
+              ? "Setting up admin access…"
+              : "Verifying identity…"}
         </h2>
         <div className="gold-divider w-20 mx-auto mb-6" />
         <Loader2 className="w-6 h-6 text-gold animate-spin mx-auto mb-4" />
-        <p className="font-body text-cream/50 text-sm tracking-wider">
-          {isPending
-            ? "Registering your identity as admin…"
-            : "Connecting to the network…"}
-        </p>
+        {timedOutState ? (
+          <div className="space-y-4">
+            <p className="font-body text-cream/60 text-sm leading-relaxed">
+              The network is taking longer than usual to respond.
+            </p>
+            <p className="font-body text-cream/40 text-xs leading-relaxed">
+              This is normal for the first connection after a period of
+              inactivity. Please wait a moment or try refreshing.
+            </p>
+            <Button
+              data-ocid="admin.claiming.refresh.button"
+              onClick={() => window.location.reload()}
+              className="mt-2 btn-gold px-6 py-2.5 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh Page
+            </Button>
+          </div>
+        ) : (
+          <p className="font-body text-cream/50 text-sm tracking-wider">
+            {isPending
+              ? "Registering your identity as admin…"
+              : "Connecting to the network…"}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -416,6 +486,16 @@ function AdminUnauthorized({
 function AdminDashboard() {
   const { isReady } = useActorReady();
 
+  // After 30 seconds of not being ready, show the extended "try refreshing" message
+  const [bannerTimedOut, setBannerTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isReady) {
+      const t = setTimeout(() => setBannerTimedOut(true), 30000);
+      return () => clearTimeout(t);
+    }
+    setBannerTimedOut(false);
+  }, [isReady]);
+
   // Render dashboard immediately. Tabs handle their own loading/disabled states.
   // If actor isn't ready yet, show a slim inline banner — never block the whole page.
   return (
@@ -446,9 +526,25 @@ function AdminDashboard() {
             className="flex items-center gap-3 border border-gold/20 bg-gold/5 rounded-sm px-4 py-3 mb-6"
           >
             <Loader2 className="w-4 h-4 text-gold animate-spin flex-shrink-0" />
-            <p className="font-body text-cream/60 text-sm tracking-wider">
-              Connecting to network… actions will be enabled shortly.
-            </p>
+            <div className="flex-1 flex items-center justify-between gap-4 flex-wrap">
+              <p className="font-body text-cream/60 text-sm tracking-wider">
+                {bannerTimedOut
+                  ? "Connection taking longer than expected — try refreshing if data doesn't appear."
+                  : "Connecting to network… actions will be enabled shortly."}
+              </p>
+              {bannerTimedOut && (
+                <Button
+                  data-ocid="admin.dashboard.refresh.button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => window.location.reload()}
+                  className="text-gold/70 hover:text-gold hover:bg-gold/10 text-xs font-body rounded-sm border border-gold/20 shrink-0 inline-flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Refresh
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
