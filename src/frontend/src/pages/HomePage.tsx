@@ -14,6 +14,9 @@ import { ZodiacWheel } from "../components/ZodiacWheel";
 
 import { type LocalReview, loadLocalReviews } from "../utils/reviewsStore";
 
+const MINAKSHI_PHOTO =
+  "/assets/uploads/WhatsApp-Image-2026-01-17-at-2.28.09-PM-1-1.jpeg";
+
 const INSTAGRAM_POSTS = [
   {
     img: "/assets/generated/insta-post-1.dim_400x400.jpg",
@@ -243,6 +246,41 @@ function ReviewsSection() {
   );
 }
 
+// ── Image components with fallbacks ──────────────────────────────
+
+function MinakshiPortrait() {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div
+        className="w-full h-full rounded-full border-2 border-gold/30 flex items-center justify-center"
+        style={{
+          background:
+            "radial-gradient(circle at 40% 35%, oklch(0.22 0.07 275), oklch(0.12 0.04 268))",
+        }}
+      >
+        <span
+          className="font-display text-6xl"
+          style={{ color: "oklch(0.76 0.12 78)" }}
+        >
+          M
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={MINAKSHI_PHOTO}
+      alt="Minakshi — Vedic Astrologer"
+      className="w-full h-full rounded-full object-cover border-2 border-gold/30"
+      style={{ filter: "brightness(0.95) saturate(0.9)" }}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 const PURUSHARTHAS = [
   {
     icon: Compass,
@@ -327,8 +365,9 @@ export function HomePage() {
         {/* Zodiac wheel */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <ZodiacWheel
-            className="w-[min(90vw,700px)] text-gold animate-spin-slow"
-            opacity={0.12}
+            className="w-[min(90vw,700px)] text-gold"
+            opacity={0.15}
+            spinning={true}
           />
         </div>
 
@@ -602,12 +641,7 @@ export function HomePage() {
               <div className="relative w-64 h-64">
                 <div className="absolute inset-0 rounded-full border-2 border-gold/40 animate-pulse-gold" />
                 <div className="absolute inset-2 rounded-full border border-gold/20" />
-                <img
-                  src="/assets/uploads/WhatsApp-Image-2026-01-17-at-2.28.09-PM-1.jpeg"
-                  alt="Minakshi — Vedic Astrologer"
-                  className="w-full h-full rounded-full object-cover border-2 border-gold/30"
-                  style={{ filter: "brightness(0.95) saturate(0.9)" }}
-                />
+                <MinakshiPortrait />
                 {/* Gold glow overlay */}
                 <div
                   className="absolute inset-0 rounded-full pointer-events-none"
@@ -673,12 +707,16 @@ export function HomePage() {
         <div className="container mx-auto max-w-5xl">
           <div className="text-center mb-6">
             <span className="text-gold/60 text-xs tracking-[0.4em] uppercase font-body block mb-4">
-              Social
+              From Instagram
             </span>
             <h2 className="font-display text-4xl sm:text-5xl text-cream mb-4">
               Reflections & Insights
             </h2>
             <div className="gold-divider w-24 mx-auto mb-6" />
+            <p className="font-body text-cream/60 text-sm max-w-md mx-auto mb-6 leading-relaxed">
+              Astrology insights and reflections shared on social media —
+              explorations of the mind, the cosmos, and the inner journey.
+            </p>
             <a
               href="https://instagram.com/dujyoti.minakshi"
               target="_blank"
@@ -686,29 +724,324 @@ export function HomePage() {
               className="inline-flex items-center gap-2 text-gold/70 hover:text-gold font-body transition-colors text-sm tracking-widest uppercase"
             >
               <Instagram className="w-4 h-4" />
-              Follow @dujyoti.minakshi
+              @dujyoti.minakshi
             </a>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-12">
-            {INSTAGRAM_POSTS.map((post) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-12">
+            {INSTAGRAM_POSTS.map((post, idx) => (
               <a
-                key={post.img}
+                key={post.caption}
                 href="https://instagram.com/dujyoti.minakshi"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group relative aspect-square overflow-hidden border border-gold/20 hover:border-gold/50 transition-all duration-300"
+                className="group relative overflow-hidden border border-gold/20 hover:border-gold/50 transition-all duration-300 flex flex-col"
+                style={{
+                  background:
+                    idx % 3 === 0
+                      ? "linear-gradient(145deg, oklch(0.14 0.055 270), oklch(0.10 0.03 260))"
+                      : idx % 3 === 1
+                        ? "linear-gradient(145deg, oklch(0.13 0.04 50), oklch(0.10 0.025 260))"
+                        : "linear-gradient(145deg, oklch(0.12 0.06 280), oklch(0.10 0.03 265))",
+                }}
               >
-                <img
-                  src={post.img}
-                  alt={post.caption}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  loading="lazy"
+                {/* Top bar */}
+                <div
+                  className="h-1 w-full"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, oklch(0.76 0.12 78), oklch(0.65 0.10 78), transparent)",
+                  }}
                 />
-                <div className="absolute inset-0 bg-navy-deep/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
-                  <p className="font-body text-cream/90 text-sm leading-relaxed">
-                    {post.caption}
+                {/* Card body */}
+                <div className="p-6 flex flex-col flex-1">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Instagram
+                      className="w-3.5 h-3.5"
+                      style={{ color: "oklch(0.76 0.12 78)" }}
+                    />
+                    <span
+                      className="text-xs tracking-widest uppercase font-body"
+                      style={{ color: "oklch(0.76 0.12 78)" }}
+                    >
+                      दूjyoti
+                    </span>
+                  </div>
+                  {/* Decorative Vedic symbol */}
+                  <div
+                    className="mb-4 opacity-40"
+                    style={{ color: "oklch(0.76 0.12 78)" }}
+                  >
+                    {idx % 6 === 0 && (
+                      /* Surya — Sun / ॐ symbol */
+                      <svg
+                        width="38"
+                        height="38"
+                        viewBox="0 0 38 38"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        role="img"
+                        aria-label="Surya — the Sun"
+                      >
+                        <circle
+                          cx="19"
+                          cy="19"
+                          r="7"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        />
+                        {[
+                          0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330,
+                        ].map((deg) => (
+                          <line
+                            key={deg}
+                            x1={19 + 10 * Math.cos((deg * Math.PI) / 180)}
+                            y1={19 + 10 * Math.sin((deg * Math.PI) / 180)}
+                            x2={19 + 16 * Math.cos((deg * Math.PI) / 180)}
+                            y2={19 + 16 * Math.sin((deg * Math.PI) / 180)}
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                            strokeLinecap="round"
+                          />
+                        ))}
+                      </svg>
+                    )}
+                    {idx % 6 === 1 && (
+                      /* Chandra — Crescent moon refined */
+                      <svg
+                        width="38"
+                        height="38"
+                        viewBox="0 0 38 38"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        role="img"
+                        aria-label="Chandra — the Moon"
+                      >
+                        <path
+                          d="M24 8C16.8 9.5 12 14.8 12 21.5C12 28.2 16.8 33 24 34C17 34 10 28.8 10 21.5C10 14.2 17 9 24 8Z"
+                          stroke="currentColor"
+                          strokeWidth="1.3"
+                          strokeLinejoin="round"
+                          fill="currentColor"
+                          fillOpacity="0.15"
+                        />
+                        <circle
+                          cx="19"
+                          cy="11"
+                          r="1"
+                          fill="currentColor"
+                          opacity="0.6"
+                        />
+                        <circle
+                          cx="27"
+                          cy="15"
+                          r="0.8"
+                          fill="currentColor"
+                          opacity="0.5"
+                        />
+                        <circle
+                          cx="25"
+                          cy="28"
+                          r="0.7"
+                          fill="currentColor"
+                          opacity="0.4"
+                        />
+                      </svg>
+                    )}
+                    {idx % 6 === 2 && (
+                      /* Shani — Saturn / Sade Sati ring */
+                      <svg
+                        width="38"
+                        height="38"
+                        viewBox="0 0 38 38"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        role="img"
+                        aria-label="Shani — Saturn"
+                      >
+                        <ellipse
+                          cx="19"
+                          cy="19"
+                          rx="8"
+                          ry="8"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                        />
+                        <ellipse
+                          cx="19"
+                          cy="19"
+                          rx="14"
+                          ry="5"
+                          stroke="currentColor"
+                          strokeWidth="1.2"
+                          strokeDasharray="2 1.5"
+                        />
+                        <circle
+                          cx="19"
+                          cy="19"
+                          r="2.5"
+                          fill="currentColor"
+                          fillOpacity="0.3"
+                          stroke="currentColor"
+                          strokeWidth="1"
+                        />
+                      </svg>
+                    )}
+                    {idx % 6 === 3 && (
+                      /* Navagraha — Nine planets star */
+                      <svg
+                        width="38"
+                        height="38"
+                        viewBox="0 0 38 38"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        role="img"
+                        aria-label="Navagraha — Nine planets"
+                      >
+                        {[0, 40, 80, 120, 160, 200, 240, 280, 320].map(
+                          (deg) => (
+                            <circle
+                              key={deg}
+                              cx={19 + 13 * Math.cos((deg * Math.PI) / 180)}
+                              cy={19 + 13 * Math.sin((deg * Math.PI) / 180)}
+                              r={deg === 0 ? 2.2 : 1.4}
+                              fill="currentColor"
+                              fillOpacity={deg === 0 ? 0.9 : 0.55}
+                            />
+                          ),
+                        )}
+                        <circle
+                          cx="19"
+                          cy="19"
+                          r="2.8"
+                          stroke="currentColor"
+                          strokeWidth="1.2"
+                          fill="currentColor"
+                          fillOpacity="0.2"
+                        />
+                      </svg>
+                    )}
+                    {idx % 6 === 4 && (
+                      /* Lotus — spiritual awakening / Moksha */
+                      <svg
+                        width="38"
+                        height="38"
+                        viewBox="0 0 38 38"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        role="img"
+                        aria-label="Lotus — Moksha"
+                      >
+                        <path
+                          d="M19 28 C19 28 12 22 12 16 C12 12 15 10 19 13 C23 10 26 12 26 16 C26 22 19 28 19 28Z"
+                          stroke="currentColor"
+                          strokeWidth="1.3"
+                          fill="currentColor"
+                          fillOpacity="0.1"
+                        />
+                        <path
+                          d="M19 28 C19 28 8 20 9 13 C10 9 14 9 19 13"
+                          stroke="currentColor"
+                          strokeWidth="1.1"
+                          fill="none"
+                        />
+                        <path
+                          d="M19 28 C19 28 30 20 29 13 C28 9 24 9 19 13"
+                          stroke="currentColor"
+                          strokeWidth="1.1"
+                          fill="none"
+                        />
+                        <line
+                          x1="19"
+                          y1="28"
+                          x2="19"
+                          y2="32"
+                          stroke="currentColor"
+                          strokeWidth="1.2"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M15 31 Q19 29 23 31"
+                          stroke="currentColor"
+                          strokeWidth="1.1"
+                          fill="none"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    )}
+                    {idx % 6 === 5 && (
+                      /* Rashi Chakra — zodiac wheel mandala */
+                      <svg
+                        width="38"
+                        height="38"
+                        viewBox="0 0 38 38"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        role="img"
+                        aria-label="Rashi Chakra — zodiac wheel"
+                      >
+                        <circle
+                          cx="19"
+                          cy="19"
+                          r="15"
+                          stroke="currentColor"
+                          strokeWidth="1"
+                          strokeOpacity="0.5"
+                        />
+                        <circle
+                          cx="19"
+                          cy="19"
+                          r="9"
+                          stroke="currentColor"
+                          strokeWidth="1.2"
+                        />
+                        <circle
+                          cx="19"
+                          cy="19"
+                          r="3"
+                          fill="currentColor"
+                          fillOpacity="0.4"
+                        />
+                        {[
+                          0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330,
+                        ].map((deg) => (
+                          <line
+                            key={deg}
+                            x1={19 + 9 * Math.cos((deg * Math.PI) / 180)}
+                            y1={19 + 9 * Math.sin((deg * Math.PI) / 180)}
+                            x2={19 + 15 * Math.cos((deg * Math.PI) / 180)}
+                            y2={19 + 15 * Math.sin((deg * Math.PI) / 180)}
+                            stroke="currentColor"
+                            strokeWidth="1"
+                            strokeOpacity="0.6"
+                          />
+                        ))}
+                      </svg>
+                    )}
+                  </div>
+                  <p
+                    className="font-body text-cream/85 text-sm leading-relaxed italic flex-1"
+                    style={{ fontSize: "0.9rem" }}
+                  >
+                    "{post.caption}"
                   </p>
+                  <div className="mt-5 flex items-center gap-1">
+                    <Star
+                      className="w-2.5 h-2.5"
+                      style={{ color: "oklch(0.76 0.12 78)", opacity: 0.5 }}
+                      fill="currentColor"
+                    />
+                    <Star
+                      className="w-2.5 h-2.5"
+                      style={{ color: "oklch(0.76 0.12 78)", opacity: 0.5 }}
+                      fill="currentColor"
+                    />
+                    <Star
+                      className="w-2.5 h-2.5"
+                      style={{ color: "oklch(0.76 0.12 78)", opacity: 0.5 }}
+                      fill="currentColor"
+                    />
+                  </div>
                 </div>
               </a>
             ))}
