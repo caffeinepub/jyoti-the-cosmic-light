@@ -63,6 +63,7 @@ import type {
 } from "../backend.d";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { parseContactFromQuestion } from "./BookingPage";
 
 // ── useActorReady: non-blocking — just exposes whether actor is available ──
 // Never reloads the page or blocks rendering.
@@ -970,6 +971,7 @@ function BookingsTab() {
                   {[
                     "Client",
                     "Email",
+                    "Contact No.",
                     "Service",
                     "Session",
                     "DOB",
@@ -994,159 +996,167 @@ function BookingsTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bookings.map((booking, idx) => (
-                  <TableRow
-                    key={booking.id.toString()}
-                    data-ocid={`admin.booking.row.${idx + 1}`}
-                    className="border-gold/10 hover:bg-gold/5 align-top"
-                  >
-                    <TableCell className="font-body text-cream/90 whitespace-nowrap font-medium">
-                      {booking.clientName}
-                    </TableCell>
-                    <TableCell className="font-body text-cream/65 text-sm whitespace-nowrap">
-                      {booking.email}
-                    </TableCell>
-                    <TableCell className="font-body text-cream/80 text-sm whitespace-nowrap max-w-[120px]">
-                      <span className="line-clamp-2">{booking.service}</span>
-                    </TableCell>
-                    <TableCell className="font-body text-cream/70 text-sm whitespace-nowrap">
-                      <div>{booking.slotDate}</div>
-                      <div className="text-cream/45 text-xs">
-                        {booking.slotTime}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-body text-cream/70 text-sm whitespace-nowrap">
-                      {booking.dob}
-                    </TableCell>
-                    <TableCell className="font-body text-cream/70 text-sm">
-                      {booking.tob}
-                    </TableCell>
-                    <TableCell className="font-body text-cream/70 text-sm max-w-[100px]">
-                      <span className="line-clamp-2">{booking.birthPlace}</span>
-                    </TableCell>
-                    <TableCell className="font-body text-cream/65 text-sm">
-                      {booking.lat.toFixed(4)}
-                    </TableCell>
-                    <TableCell className="font-body text-cream/65 text-sm">
-                      {booking.lng.toFixed(4)}
-                    </TableCell>
-                    <TableCell className="font-body text-cream/70 text-sm capitalize">
-                      {booking.gender}
-                    </TableCell>
-                    <TableCell className="font-body text-cream/60 text-sm max-w-[140px]">
-                      <span className="line-clamp-2 text-xs">
-                        {booking.question || "—"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-body text-gold text-sm whitespace-nowrap">
-                      {booking.feeApplied > 0n
-                        ? `₹${Number(booking.feeApplied).toLocaleString("en-IN")}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="font-body text-gold/70 text-sm whitespace-nowrap">
-                      {booking.couponUsed || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        className={
-                          booking.status === "cancelled"
-                            ? "bg-destructive/15 text-destructive border-0 font-body text-xs"
-                            : "bg-gold/15 text-gold border border-gold/30 font-body text-xs"
-                        }
-                      >
-                        {booking.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {booking.status !== "cancelled" && (
+                {bookings.map((booking, idx) => {
+                  const parsed = parseContactFromQuestion(booking.question);
+                  return (
+                    <TableRow
+                      key={booking.id.toString()}
+                      data-ocid={`admin.booking.row.${idx + 1}`}
+                      className="border-gold/10 hover:bg-gold/5 align-top"
+                    >
+                      <TableCell className="font-body text-cream/90 whitespace-nowrap font-medium">
+                        {booking.clientName}
+                      </TableCell>
+                      <TableCell className="font-body text-cream/65 text-sm whitespace-nowrap">
+                        {booking.email}
+                      </TableCell>
+                      <TableCell className="font-body text-gold/90 text-sm whitespace-nowrap font-medium">
+                        {parsed.contactNo || "—"}
+                      </TableCell>
+                      <TableCell className="font-body text-cream/80 text-sm whitespace-nowrap max-w-[120px]">
+                        <span className="line-clamp-2">{booking.service}</span>
+                      </TableCell>
+                      <TableCell className="font-body text-cream/70 text-sm whitespace-nowrap">
+                        <div>{booking.slotDate}</div>
+                        <div className="text-cream/45 text-xs">
+                          {booking.slotTime}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-body text-cream/70 text-sm whitespace-nowrap">
+                        {booking.dob}
+                      </TableCell>
+                      <TableCell className="font-body text-cream/70 text-sm">
+                        {booking.tob}
+                      </TableCell>
+                      <TableCell className="font-body text-cream/70 text-sm max-w-[100px]">
+                        <span className="line-clamp-2">
+                          {booking.birthPlace}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-body text-cream/65 text-sm">
+                        {booking.lat.toFixed(4)}
+                      </TableCell>
+                      <TableCell className="font-body text-cream/65 text-sm">
+                        {booking.lng.toFixed(4)}
+                      </TableCell>
+                      <TableCell className="font-body text-cream/70 text-sm capitalize">
+                        {booking.gender}
+                      </TableCell>
+                      <TableCell className="font-body text-cream/60 text-sm max-w-[140px]">
+                        <span className="line-clamp-2 text-xs">
+                          {parsed.question || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-body text-gold text-sm whitespace-nowrap">
+                        {booking.feeApplied > 0n
+                          ? `₹${Number(booking.feeApplied).toLocaleString("en-IN")}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="font-body text-gold/70 text-sm whitespace-nowrap">
+                        {booking.couponUsed || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={
+                            booking.status === "cancelled"
+                              ? "bg-destructive/15 text-destructive border-0 font-body text-xs"
+                              : "bg-gold/15 text-gold border border-gold/30 font-body text-xs"
+                          }
+                        >
+                          {booking.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {booking.status !== "cancelled" && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  data-ocid={`admin.booking.cancel_button.${idx + 1}`}
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={!isActorReady}
+                                  className="text-cream/40 hover:text-destructive hover:bg-destructive/10 text-xs font-body rounded-sm disabled:opacity-40"
+                                >
+                                  Cancel
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent className="bg-card border-gold/25">
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle className="font-display text-cream">
+                                    Cancel this booking?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription className="font-body text-cream/60">
+                                    This will cancel {booking.clientName}'s
+                                    booking for {booking.slotDate} at{" "}
+                                    {booking.slotTime}. This cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel className="btn-gold-outline rounded-sm font-body">
+                                    Keep Booking
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleCancel(booking)}
+                                    className="bg-destructive text-destructive-foreground rounded-sm font-body"
+                                  >
+                                    Cancel Booking
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                          {/* Delete button — available for ALL bookings */}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
-                                data-ocid={`admin.booking.cancel_button.${idx + 1}`}
+                                data-ocid={`admin.booking.delete_button.${idx + 1}`}
                                 variant="ghost"
-                                size="sm"
+                                size="icon"
                                 disabled={!isActorReady}
-                                className="text-cream/40 hover:text-destructive hover:bg-destructive/10 text-xs font-body rounded-sm disabled:opacity-40"
+                                className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10 disabled:opacity-40"
+                                title={
+                                  !isActorReady
+                                    ? "Connecting to network…"
+                                    : "Delete booking"
+                                }
                               >
-                                Cancel
+                                <Trash2 className="w-4 h-4" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent className="bg-card border-gold/25">
                               <AlertDialogHeader>
                                 <AlertDialogTitle className="font-display text-cream">
-                                  Cancel this booking?
+                                  Delete this booking?
                                 </AlertDialogTitle>
                                 <AlertDialogDescription className="font-body text-cream/60">
-                                  This will cancel {booking.clientName}'s
-                                  booking for {booking.slotDate} at{" "}
-                                  {booking.slotTime}. This cannot be undone.
+                                  This will permanently remove{" "}
+                                  {booking.clientName}'s booking. This cannot be
+                                  undone.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel className="btn-gold-outline rounded-sm font-body">
-                                  Keep Booking
+                                <AlertDialogCancel
+                                  data-ocid={`admin.booking.cancel_button.${idx + 1}`}
+                                  className="btn-gold-outline rounded-sm font-body"
+                                >
+                                  Keep
                                 </AlertDialogCancel>
                                 <AlertDialogAction
-                                  onClick={() => handleCancel(booking)}
+                                  data-ocid={`admin.booking.confirm_button.${idx + 1}`}
+                                  onClick={() => handleDelete(booking)}
                                   className="bg-destructive text-destructive-foreground rounded-sm font-body"
                                 >
-                                  Cancel Booking
+                                  Delete
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
-                        )}
-                        {/* Delete button — available for ALL bookings */}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              data-ocid={`admin.booking.delete_button.${idx + 1}`}
-                              variant="ghost"
-                              size="icon"
-                              disabled={!isActorReady}
-                              className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10 disabled:opacity-40"
-                              title={
-                                !isActorReady
-                                  ? "Connecting to network…"
-                                  : "Delete booking"
-                              }
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="bg-card border-gold/25">
-                            <AlertDialogHeader>
-                              <AlertDialogTitle className="font-display text-cream">
-                                Delete this booking?
-                              </AlertDialogTitle>
-                              <AlertDialogDescription className="font-body text-cream/60">
-                                This will permanently remove{" "}
-                                {booking.clientName}'s booking. This cannot be
-                                undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel
-                                data-ocid={`admin.booking.cancel_button.${idx + 1}`}
-                                className="btn-gold-outline rounded-sm font-body"
-                              >
-                                Keep
-                              </AlertDialogCancel>
-                              <AlertDialogAction
-                                data-ocid={`admin.booking.confirm_button.${idx + 1}`}
-                                onClick={() => handleDelete(booking)}
-                                className="bg-destructive text-destructive-foreground rounded-sm font-body"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

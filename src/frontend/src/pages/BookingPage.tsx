@@ -68,6 +68,7 @@ const STEPS = ["Service", "Date & Time", "Your Details"];
 interface BookingForm {
   clientName: string;
   email: string;
+  contactNo: string;
   dob: string;
   tob: string;
   birthPlace: string;
@@ -80,6 +81,7 @@ interface BookingForm {
 const EMPTY_FORM: BookingForm = {
   clientName: "",
   email: "",
+  contactNo: "",
   dob: "",
   tob: "",
   birthPlace: "",
@@ -88,6 +90,26 @@ const EMPTY_FORM: BookingForm = {
   gender: "",
   question: "",
 };
+
+// ── Helpers to encode/decode contactNo in question field ─────────
+function encodeQuestionWithContact(
+  contactNo: string,
+  question: string,
+): string {
+  if (!contactNo.trim()) return question;
+  return `[Contact:${contactNo.trim()}]${question ? ` ${question}` : ""}`;
+}
+
+export function parseContactFromQuestion(raw: string): {
+  contactNo: string;
+  question: string;
+} {
+  const match = raw.match(/^\[Contact:([^\]]+)\]\s*(.*)/s);
+  if (match) {
+    return { contactNo: match[1], question: match[2] ?? "" };
+  }
+  return { contactNo: "", question: raw };
+}
 
 // ── Place Search Component ───────────────────────────────────────
 
@@ -412,6 +434,7 @@ export function BookingPage() {
   const canSubmit =
     form.clientName.trim() &&
     form.email.trim() &&
+    form.contactNo.trim() &&
     form.dob &&
     form.tob &&
     form.birthPlace.trim() &&
@@ -433,7 +456,7 @@ export function BookingPage() {
         lat: Number.parseFloat(form.lat),
         lng: Number.parseFloat(form.lng),
         gender: form.gender,
-        question: form.question,
+        question: encodeQuestionWithContact(form.contactNo, form.question),
         couponCode: appliedCoupon?.code,
       });
 
@@ -470,7 +493,7 @@ export function BookingPage() {
           setSelectedService("");
           setSelectedDate("");
           setSelectedSlot(null);
-          setForm(EMPTY_FORM);
+          setForm({ ...EMPTY_FORM });
           setAppliedCoupon(null);
           setCouponInput("");
           setCouponError("");
@@ -784,6 +807,26 @@ export function BookingPage() {
                   placeholder="your@email.com"
                   value={form.email}
                   onChange={(e) => handleFormChange("email", e.target.value)}
+                  className="bg-card border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label
+                  className="text-cream/70 font-body text-sm tracking-wide"
+                  htmlFor="contactNo"
+                >
+                  Contact Number *
+                </Label>
+                <Input
+                  id="contactNo"
+                  type="tel"
+                  data-ocid="booking.contactno.input"
+                  placeholder="+91 XXXXX XXXXX"
+                  value={form.contactNo}
+                  onChange={(e) =>
+                    handleFormChange("contactNo", e.target.value)
+                  }
                   className="bg-card border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body"
                 />
               </div>
