@@ -101,28 +101,22 @@ const ADMIN_PRINCIPAL_KEY = "dujyoti_admin_principal";
 export function AdminPage() {
   const { identity, login, loginStatus, isInitializing } =
     useInternetIdentity();
-  const { actor, isFetching: isActorFetching } = useActor();
+  const { actor } = useActor();
   const { data: isAdminUser, isLoading: isAdminLoading } = useIsAdmin();
   const claimFirstAdmin = useClaimFirstAdmin();
 
-  // Auto-claim state
-  const [autoClaimAttempted, setAutoClaimAttempted] = useState(false);
-  const [autoClaimFailed, setAutoClaimFailed] = useState(false);
-
-  // Add a timeout so loading never spins forever after login
-  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setLoadingTimedOut(true), 8000);
-    return () => clearTimeout(timer);
-  }, []);
+  // Track whether we've attempted claim and the result
+  const [claimAttempted, setClaimAttempted] = useState(false);
+  const [claimFailed, setClaimFailed] = useState(false);
 
   // Determine if identity is a genuine authenticated (non-anonymous) principal
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
 
-  // ── Admin persistence: check localStorage cache ──────────────────
   const currentPrincipal = isAuthenticated
     ? identity.getPrincipal().toString()
     : null;
+
+  // ── localStorage cache: skip claim check if we've verified this principal before ──
   const cachedAdminPrincipal = (() => {
     try {
       return localStorage.getItem(ADMIN_PRINCIPAL_KEY);
@@ -144,7 +138,7 @@ export function AdminPage() {
     }
   }, [isAdminUser, currentPrincipal]);
 
-  // If backend comes back false but cache says admin → cache is stale, clear it
+  // Stale cache: backend says NOT admin but cache says yes — clear and reload
   useEffect(() => {
     if (!isAdminLoading && isAdminUser === false && isCachedAdmin) {
       try {
@@ -154,24 +148,21 @@ export function AdminPage() {
     }
   }, [isAdminLoading, isAdminUser, isCachedAdmin]);
 
-  // Auto-attempt claimFirstAdmin when authenticated, actor ready, not admin yet, and no cache hit
+  // Auto-attempt claimFirstAdmin as soon as actor is available and we haven't tried yet
   useEffect(() => {
     if (
       isAuthenticated &&
       actor &&
       !isAdminUser &&
       !isCachedAdmin &&
-      !autoClaimAttempted &&
-      !isAdminLoading &&
-      !isActorFetching
+      !claimAttempted &&
+      !isAdminLoading
     ) {
-      setAutoClaimAttempted(true);
+      setClaimAttempted(true);
       claimFirstAdmin
         .mutateAsync()
         .then((success) => {
           if (success) {
-            // Save principal to localStorage BEFORE reload so the cache check
-            // works immediately on the next page load (II takes time to re-hydrate)
             if (currentPrincipal) {
               try {
                 localStorage.setItem(ADMIN_PRINCIPAL_KEY, currentPrincipal);
@@ -179,12 +170,11 @@ export function AdminPage() {
             }
             window.location.reload();
           } else {
-            // Admin slot already taken by a different identity
-            setAutoClaimFailed(true);
+            setClaimFailed(true);
           }
         })
         .catch(() => {
-          setAutoClaimFailed(true);
+          setClaimFailed(true);
         });
     }
   }, [
@@ -192,78 +182,53 @@ export function AdminPage() {
     actor,
     isAdminUser,
     isCachedAdmin,
-    autoClaimAttempted,
+    claimAttempted,
     isAdminLoading,
-    isActorFetching,
     claimFirstAdmin,
     currentPrincipal,
   ]);
 
-  // Show loading while initializing auth, building the actor, or checking admin status.
-  // Stop loading after 8 seconds regardless to prevent infinite spinner.
-  // Also show loading when cache confirms admin but actor is still building (to avoid anonymous-actor calls).
-  const isLoading =
-    !loadingTimedOut &&
-    (isInitializing || isActorFetching || (isAuthenticated && isAdminLoading));
-
-  if (isLoading) {
+  // Only block on isInitializing — don't block on actor fetching
+  if (isInitializing) {
     return <AdminLoading />;
   }
 
-  // ── If cache confirms this principal is admin, go straight to dashboard ──
-  // (still run isAdmin in the background to validate; handled by effects above)
-  if (isAuthenticated && isCachedAdmin) {
-    return <AdminDashboard />;
-  }
-
+  // Not logged in → simple login screen
   if (!isAuthenticated) {
     return <AdminLogin onLogin={login} loginStatus={loginStatus} />;
   }
 
-  // Authenticated but not yet admin — show claiming screen or access denied
-  if (!isAdminUser) {
-    const handleManualClaim = () => {
-      claimFirstAdmin
-        .mutateAsync()
-        .then((success) => {
-          if (success) {
-            // Save principal BEFORE reload so cache check passes immediately on next load
-            if (currentPrincipal) {
-              try {
-                localStorage.setItem(ADMIN_PRINCIPAL_KEY, currentPrincipal);
-              } catch {}
-            }
-            window.location.reload();
-          } else {
-            setAutoClaimFailed(true);
-          }
-        })
-        .catch(() => setAutoClaimFailed(true));
-    };
-
-    // Still attempting auto-claim (or waiting for actor to settle)
-    if (!autoClaimAttempted || claimFirstAdmin.isPending) {
-      return <AdminClaiming onManualClaim={handleManualClaim} />;
-    }
-    // Auto-claim definitively failed (admin already assigned to someone else)
-    if (autoClaimFailed) {
-      return (
-        <AdminUnauthorized
-          identity={identity}
-          isClaimPending={claimFirstAdmin.isPending}
-          onRetry={() => {
-            setAutoClaimAttempted(false);
-            setAutoClaimFailed(false);
-          }}
-          onManualClaim={handleManualClaim}
-        />
-      );
-    }
-    // Auto-claim attempt made but result unclear — show claiming screen while we wait
-    return <AdminClaiming onManualClaim={handleManualClaim} />;
+  // Cached admin — go straight to dashboard
+  if (isCachedAdmin) {
+    return <AdminDashboard />;
   }
 
-  return <AdminDashboard />;
+  // Backend confirmed admin — go to dashboard
+  if (isAdminUser) {
+    return <AdminDashboard />;
+  }
+
+  // Still loading admin status or waiting for actor
+  if (isAdminLoading || (!claimAttempted && !actor)) {
+    return <AdminLoading />;
+  }
+
+  // Claim definitively failed — show access denied
+  if (claimFailed) {
+    return (
+      <AdminUnauthorized
+        identity={identity}
+        isClaimPending={claimFirstAdmin.isPending}
+        onRetry={() => {
+          setClaimAttempted(false);
+          setClaimFailed(false);
+        }}
+      />
+    );
+  }
+
+  // Claim in progress or not yet started (actor not ready yet)
+  return <AdminClaiming isPending={claimFirstAdmin.isPending} />;
 }
 
 // ── Sub-components ──────────────────────────────────────────────────
@@ -280,43 +245,7 @@ function AdminLoading() {
   );
 }
 
-function AdminClaiming({ onManualClaim }: { onManualClaim: () => void }) {
-  const [timedOut, setTimedOut] = useState(false);
-  const [isClaiming, setIsClaiming] = useState(false);
-  const [claimResult, setClaimResult] = useState<"success" | "failed" | null>(
-    null,
-  );
-  const { clear } = useInternetIdentity();
-
-  useEffect(() => {
-    const timer = setTimeout(() => setTimedOut(true), 5000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleClaim = async () => {
-    setIsClaiming(true);
-    setClaimResult(null);
-    try {
-      await onManualClaim();
-      setClaimResult("success");
-    } catch {
-      setClaimResult("failed");
-    } finally {
-      setIsClaiming(false);
-    }
-  };
-
-  const handleSignOut = () => {
-    try {
-      localStorage.removeItem(ADMIN_PRINCIPAL_KEY);
-      sessionStorage.removeItem("caffeineAdminToken");
-    } catch {}
-    clear();
-    setTimeout(() => {
-      window.location.href = window.location.pathname;
-    }, 400);
-  };
-
+function AdminClaiming({ isPending }: { isPending: boolean }) {
   return (
     <div
       className="min-h-screen flex items-center justify-center px-6"
@@ -324,85 +253,19 @@ function AdminClaiming({ onManualClaim }: { onManualClaim: () => void }) {
       data-ocid="admin.loading_state"
     >
       <div className="text-center max-w-sm w-full">
-        {!timedOut ? (
-          <>
-            <Loader2 className="w-8 h-8 text-gold animate-spin mx-auto mb-4" />
-            <p className="font-body text-cream/60 text-sm tracking-wider">
-              Setting up admin access…
-            </p>
-          </>
-        ) : claimResult === "failed" ? (
-          <>
-            <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
-              <Shield className="w-8 h-8 text-gold" />
-            </div>
-            <h2 className="font-display text-2xl text-cream mb-3">
-              Admin Already Claimed
-            </h2>
-            <div className="gold-divider w-20 mx-auto mb-6" />
-            <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6 space-y-2">
-              <p className="font-body text-cream/70 text-sm leading-relaxed">
-                Admin access is registered to a different identity. To fix this:
-              </p>
-              <ol className="font-body text-cream/60 text-sm leading-relaxed list-decimal list-inside space-y-1">
-                <li>Click "Sign Out" below</li>
-                <li>Enter your Caffeine Admin Token on the login page</li>
-                <li>
-                  In the II popup, click{" "}
-                  <strong className="text-gold">"Create New"</strong> to create
-                  a fresh identity
-                </li>
-              </ol>
-            </div>
-            <Button
-              onClick={handleSignOut}
-              data-ocid="admin.signout.primary_button"
-              className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
-            >
-              <X className="w-4 h-4" />
-              Sign Out &amp; Start Over
-            </Button>
-          </>
-        ) : (
-          <>
-            <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
-              <Shield className="w-8 h-8 text-gold" />
-            </div>
-            <h2 className="font-display text-2xl text-cream mb-3">
-              Claim Admin Access
-            </h2>
-            <div className="gold-divider w-20 mx-auto mb-6" />
-            <p className="font-body text-cream/60 text-sm mb-8 leading-relaxed">
-              You are signed in. Click below to register yourself as the admin
-              of दूjyoti.
-            </p>
-            <Button
-              onClick={handleClaim}
-              disabled={isClaiming}
-              data-ocid="admin.claim.primary_button"
-              className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
-            >
-              {isClaiming ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Shield className="w-4 h-4" />
-              )}
-              {isClaiming ? "Claiming…" : "Claim Admin Access"}
-            </Button>
-            <p className="font-body text-cream/40 text-xs mt-4 leading-relaxed">
-              If this doesn't work, sign out and start over with your admin
-              token.
-            </p>
-            <Button
-              onClick={handleSignOut}
-              variant="ghost"
-              data-ocid="admin.signout.secondary_button"
-              className="mt-3 w-full py-2 tracking-widest uppercase text-xs rounded-none text-cream/40 hover:text-cream/70 hover:bg-cream/5 inline-flex items-center justify-center gap-2"
-            >
-              Sign Out &amp; Start Over
-            </Button>
-          </>
-        )}
+        <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
+          <Shield className="w-8 h-8 text-gold" />
+        </div>
+        <h2 className="font-display text-2xl text-cream mb-3">
+          {isPending ? "Setting up admin access…" : "Verifying identity…"}
+        </h2>
+        <div className="gold-divider w-20 mx-auto mb-6" />
+        <Loader2 className="w-6 h-6 text-gold animate-spin mx-auto mb-4" />
+        <p className="font-body text-cream/50 text-sm tracking-wider">
+          {isPending
+            ? "Registering your identity as admin…"
+            : "Connecting to the network…"}
+        </p>
       </div>
     </div>
   );
@@ -415,39 +278,7 @@ function AdminLogin({
   onLogin: () => void;
   loginStatus: string;
 }) {
-  const [token, setToken] = useState("");
-  const [tokenSaved, setTokenSaved] = useState(false);
-
-  // On mount, check if token is already in sessionStorage
-  useEffect(() => {
-    try {
-      const existing = sessionStorage.getItem("caffeineAdminToken");
-      if (existing) {
-        setToken(existing);
-        setTokenSaved(true);
-      }
-    } catch {}
-  }, []);
-
-  const handleSaveToken = () => {
-    const t = token.trim();
-    if (!t) return;
-    try {
-      sessionStorage.setItem("caffeineAdminToken", t);
-      setTokenSaved(true);
-    } catch {}
-  };
-
-  const handleLogin = () => {
-    // Ensure token is in sessionStorage before triggering II redirect
-    const t = token.trim();
-    if (t) {
-      try {
-        sessionStorage.setItem("caffeineAdminToken", t);
-      } catch {}
-    }
-    onLogin();
-  };
+  const isLoggingIn = loginStatus === "logging-in";
 
   return (
     <div
@@ -459,76 +290,34 @@ function AdminLogin({
           <Shield className="w-8 h-8 text-gold" />
         </div>
         <h1 className="font-display text-3xl text-cream mb-3">Admin Access</h1>
-        <div className="gold-divider w-20 mx-auto mb-6" />
+        <div className="gold-divider w-20 mx-auto mb-8" />
 
-        {/* Step 1: Token entry */}
-        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6">
-          <p className="font-body text-gold/70 text-xs tracking-widest uppercase mb-3">
-            Step 1 — Enter Admin Token
-          </p>
-          <p className="font-body text-cream/50 text-xs mb-3 leading-relaxed">
-            Find your token in the Caffeine builder dashboard (Settings or Admin
-            Token section). Paste it here before signing in.
-          </p>
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              data-ocid="admin.token.input"
-              placeholder="Paste admin token here…"
-              value={token}
-              onChange={(e) => {
-                setToken(e.target.value);
-                setTokenSaved(false);
-              }}
-              className="bg-card/60 border-gold/25 text-cream placeholder:text-cream/30 focus:border-gold rounded-sm font-body text-sm flex-1"
-            />
-            <Button
-              onClick={handleSaveToken}
-              disabled={!token.trim() || tokenSaved}
-              data-ocid="admin.token.save_button"
-              variant="ghost"
-              className="border border-gold/30 text-gold hover:bg-gold/10 rounded-sm text-xs px-3 shrink-0"
-            >
-              {tokenSaved ? <Check className="w-4 h-4" /> : "Save"}
-            </Button>
-          </div>
-          {tokenSaved && (
-            <p className="font-body text-gold/60 text-xs mt-2 flex items-center gap-1">
-              <Check className="w-3 h-3" /> Token saved — ready to sign in
-            </p>
-          )}
-        </div>
+        <p className="font-body text-cream/60 text-sm leading-relaxed mb-10">
+          Sign in with Internet Identity to access the दूjyoti dashboard.
+        </p>
 
-        {/* Step 2: Sign in */}
-        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6">
-          <p className="font-body text-gold/70 text-xs tracking-widest uppercase mb-3">
-            Step 2 — Sign In
-          </p>
-          <p className="font-body text-cream/50 text-xs mb-4 leading-relaxed">
-            Use fingerprint or Face ID. The token above will be used
-            automatically to register you as admin.
-          </p>
-          <Button
-            onClick={handleLogin}
-            disabled={loginStatus === "logging-in" || !token.trim()}
-            data-ocid="admin.login.primary_button"
-            className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none"
-          >
-            {loginStatus === "logging-in" ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Signing in…
-              </>
-            ) : (
-              "Sign In with Internet Identity"
-            )}
-          </Button>
-          {!token.trim() && (
-            <p className="font-body text-cream/40 text-xs mt-2 text-center">
-              Enter your admin token above first
-            </p>
+        <Button
+          onClick={onLogin}
+          disabled={isLoggingIn}
+          data-ocid="admin.login.primary_button"
+          className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
+        >
+          {isLoggingIn ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Signing in…
+            </>
+          ) : (
+            <>
+              <Shield className="w-4 h-4" />
+              Sign In with Internet Identity
+            </>
           )}
-        </div>
+        </Button>
+
+        <p className="font-body text-cream/35 text-xs mt-6 leading-relaxed">
+          Use your device fingerprint or Face ID to authenticate securely.
+        </p>
       </div>
     </div>
   );
@@ -541,7 +330,6 @@ function AdminUnauthorized({
 }: {
   identity: ReturnType<typeof useInternetIdentity>["identity"];
   onRetry: () => void;
-  onManualClaim: () => void;
   isClaimPending: boolean;
 }) {
   const { clear } = useInternetIdentity();
@@ -550,8 +338,6 @@ function AdminUnauthorized({
   const handleSignOut = () => {
     try {
       localStorage.removeItem(ADMIN_PRINCIPAL_KEY);
-      // Clear any cached token so the login page shows fresh
-      sessionStorage.removeItem("caffeineAdminToken");
     } catch {}
     clear();
     setTimeout(() => {
@@ -572,9 +358,15 @@ function AdminUnauthorized({
         <h1 className="font-display text-3xl text-cream mb-3">Access Denied</h1>
         <div className="gold-divider w-20 mx-auto mb-6" />
 
+        <p className="font-body text-cream/60 text-sm mb-6 leading-relaxed">
+          Your identity is not registered as the admin of this site. If you are
+          Minakshi, sign out and sign back in with the same device you used the
+          first time.
+        </p>
+
         {/* Current identity display */}
         {principal && (
-          <div className="bg-gold/5 border border-gold/20 rounded-sm p-4 text-left mb-4">
+          <div className="bg-gold/5 border border-gold/20 rounded-sm p-4 text-left mb-6">
             <p className="font-body text-cream/50 text-xs tracking-wider uppercase mb-1">
               Your current identity
             </p>
@@ -584,60 +376,29 @@ function AdminUnauthorized({
           </div>
         )}
 
-        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6 space-y-3">
-          <p className="font-body text-cream/80 text-sm leading-relaxed font-medium">
-            How to fix this:
-          </p>
-          <ol className="font-body text-cream/60 text-sm leading-relaxed list-decimal list-inside space-y-2">
-            <li>
-              Click <strong className="text-cream/80">"Sign Out"</strong> below
-            </li>
-            <li>
-              On the login screen, paste your{" "}
-              <strong className="text-gold">Caffeine Admin Token</strong> and
-              click Save
-            </li>
-            <li>
-              Click{" "}
-              <strong className="text-cream/80">
-                "Sign In with Internet Identity"
-              </strong>
-            </li>
-            <li>
-              In the Internet Identity popup, click{" "}
-              <strong className="text-gold">"Create New"</strong> to create a
-              fresh identity — this becomes your permanent admin account
-            </li>
-          </ol>
-          <p className="font-body text-cream/40 text-xs mt-2 leading-relaxed">
-            Your Caffeine Admin Token is visible in the Caffeine builder
-            dashboard (Settings or the Admin Token section).
-          </p>
-        </div>
-
         <div className="space-y-3">
-          <Button
-            onClick={handleSignOut}
-            data-ocid="admin.signout.primary_button"
-            className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
-          >
-            <X className="w-4 h-4" />
-            Sign Out &amp; Start Over
-          </Button>
-
           <Button
             onClick={onRetry}
             disabled={isClaimPending}
-            data-ocid="admin.retry.secondary_button"
-            variant="ghost"
-            className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/60 hover:text-cream hover:bg-cream/5 border border-gold/20 inline-flex items-center justify-center gap-2"
+            data-ocid="admin.retry.primary_button"
+            className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
           >
             {isClaimPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            Re-check Status
+            Try Again
+          </Button>
+
+          <Button
+            onClick={handleSignOut}
+            data-ocid="admin.signout.secondary_button"
+            variant="ghost"
+            className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/60 hover:text-cream hover:bg-cream/5 border border-gold/20 inline-flex items-center justify-center gap-2"
+          >
+            <X className="w-4 h-4" />
+            Sign Out &amp; Switch Identity
           </Button>
         </div>
       </div>
@@ -646,16 +407,8 @@ function AdminUnauthorized({
 }
 
 function AdminDashboard() {
-  const { actor, isFetching: isActorFetching } = useActor();
-  const { identity, isInitializing } = useInternetIdentity();
-  const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
-
-  // Wait until the authenticated actor is ready before showing any tabs.
-  // This prevents "Not connected" errors when mutations fire before the actor is built.
-  if (isInitializing || isActorFetching || !actor || !isAuthenticated) {
-    return <AdminLoading />;
-  }
-
+  // Dashboard renders immediately — no blocking on actor.
+  // Individual tabs handle their own loading/error states.
   return (
     <div
       className="min-h-screen pt-24 px-4 sm:px-6"
