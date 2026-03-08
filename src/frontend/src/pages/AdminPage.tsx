@@ -52,7 +52,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type {
   AvailableSlot,
@@ -63,6 +63,42 @@ import type {
 } from "../backend.d";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
+
+// ── useActorReady: retry pattern to recover from actor init failure on live site ──
+// The live site doesn't have caffeineAdminToken in the URL, so
+// _initializeAccessControlWithSecret may block/fail. If actor is still null
+// after 4 s, we do a one-time page reload to let useActor retry cleanly.
+function useActorReady() {
+  const { actor } = useActor();
+  const retriedRef = useRef(false);
+
+  useEffect(() => {
+    if (actor) return; // already connected — nothing to do
+    if (retriedRef.current) return; // already retried once
+    const alreadyRetried =
+      sessionStorage.getItem("dujyoti_actor_retry") === "1";
+    if (alreadyRetried) return; // don't retry more than once
+
+    const t = setTimeout(() => {
+      if (!actor) {
+        retriedRef.current = true;
+        sessionStorage.setItem("dujyoti_actor_retry", "1");
+        window.location.reload();
+      }
+    }, 4000);
+
+    return () => clearTimeout(t);
+  }, [actor]);
+
+  // Clear the retry flag once we're connected so future navigations don't skip retries
+  useEffect(() => {
+    if (actor) {
+      sessionStorage.removeItem("dujyoti_actor_retry");
+    }
+  }, [actor]);
+
+  return { actor, isReady: !!actor };
+}
 import {
   useAddRemedy,
   useAddSlot,
@@ -407,8 +443,34 @@ function AdminUnauthorized({
 }
 
 function AdminDashboard() {
-  // Dashboard renders immediately — no blocking on actor.
-  // Individual tabs handle their own loading/error states.
+  const { isReady } = useActorReady();
+
+  // Show a full-page connecting screen while actor is not yet available.
+  // useActorReady will auto-reload once if it stays null for >4 s.
+  if (!isReady) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center px-6"
+        style={{ background: "oklch(0.09 0.025 260)" }}
+        data-ocid="admin.loading_state"
+      >
+        <div className="text-center max-w-sm w-full">
+          <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
+            <Shield className="w-8 h-8 text-gold" />
+          </div>
+          <h2 className="font-display text-2xl text-cream mb-3">
+            Connecting to network…
+          </h2>
+          <div className="gold-divider w-20 mx-auto mb-6" />
+          <Loader2 className="w-6 h-6 text-gold animate-spin mx-auto mb-4" />
+          <p className="font-body text-cream/50 text-sm tracking-wider">
+            Establishing a secure connection. This may take a moment.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="min-h-screen pt-24 px-4 sm:px-6"
@@ -529,19 +591,34 @@ function AdminDashboard() {
 function AvailabilityTab() {
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
+  const { actor } = useActor();
+  const isActorReady = !!actor;
   const { data: slots, isLoading } = useAllSlots();
   const addSlot = useAddSlot();
   const removeSlot = useRemoveSlot();
 
   const handleAddSlot = async () => {
     if (!newDate || !newTime) return;
+    if (!isActorReady) {
+      toast.error(
+        "Still connecting to the network, please wait a moment and try again.",
+      );
+      return;
+    }
     try {
       await addSlot.mutateAsync({ date: newDate, time: newTime });
       setNewDate("");
       setNewTime("");
       toast.success("Slot added successfully.");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to add slot.");
+      const msg = e instanceof Error ? e.message : "Failed to add slot.";
+      if (msg === "Not connected") {
+        toast.error(
+          "Still connecting to the network, please wait a moment and try again.",
+        );
+      } else {
+        toast.error(msg);
+      }
     }
   };
 
@@ -558,9 +635,11 @@ function AvailabilityTab() {
     <div className="space-y-8">
       {/* Add slot form */}
       <div className="card-cosmic rounded-sm p-6">
-        <h2 className="font-display text-xl text-cream mb-6">
-          Add Availability Slot
-        </h2>
+        <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+          <h2 className="font-display text-xl text-cream">
+            Add Availability Slot
+          </h2>
+        </div>
         <div className="flex flex-col sm:flex-row items-end gap-4">
           <div className="flex-1 space-y-2">
             <Label
@@ -597,8 +676,10 @@ function AvailabilityTab() {
           <Button
             data-ocid="admin.add_slot.button"
             onClick={handleAddSlot}
-            disabled={!newDate || !newTime || addSlot.isPending}
-            className="btn-gold px-6 py-2.5 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2"
+            disabled={
+              !newDate || !newTime || addSlot.isPending || !isActorReady
+            }
+            className="btn-gold px-6 py-2.5 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2 disabled:opacity-50"
           >
             {addSlot.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -745,6 +826,8 @@ function AvailabilityTab() {
 // ── Bookings Tab ─────────────────────────────────────────────────
 
 function BookingsTab() {
+  const { actor } = useActor();
+  const isActorReady = !!actor;
   const { data: bookings, isLoading, isError } = useBookings();
   const cancelBooking = useCancelBooking();
 
@@ -753,7 +836,12 @@ function BookingsTab() {
       await cancelBooking.mutateAsync(booking.id);
       toast.success("Booking cancelled.");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to cancel booking.");
+      const msg = e instanceof Error ? e.message : "Failed to cancel booking.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -762,7 +850,12 @@ function BookingsTab() {
       await cancelBooking.mutateAsync(booking.id);
       toast.success("Booking deleted.");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete booking.");
+      const msg = e instanceof Error ? e.message : "Failed to delete booking.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -917,7 +1010,8 @@ function BookingsTab() {
                                 data-ocid={`admin.booking.cancel_button.${idx + 1}`}
                                 variant="ghost"
                                 size="sm"
-                                className="text-cream/40 hover:text-destructive hover:bg-destructive/10 text-xs font-body rounded-sm"
+                                disabled={!isActorReady}
+                                className="text-cream/40 hover:text-destructive hover:bg-destructive/10 text-xs font-body rounded-sm disabled:opacity-40"
                               >
                                 Cancel
                               </Button>
@@ -954,8 +1048,13 @@ function BookingsTab() {
                               data-ocid={`admin.booking.delete_button.${idx + 1}`}
                               variant="ghost"
                               size="icon"
-                              className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10"
-                              title="Delete booking"
+                              disabled={!isActorReady}
+                              className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10 disabled:opacity-40"
+                              title={
+                                !isActorReady
+                                  ? "Connecting to network…"
+                                  : "Delete booking"
+                              }
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -1010,6 +1109,8 @@ const SERVICE_NAMES = [
 ];
 
 function FeesTab() {
+  const { actor } = useActor();
+  const isActorReady = !!actor;
   const { data: fees, isLoading } = useServiceFees();
   const setServiceFee = useSetServiceFee();
   const removeServiceFee = useRemoveServiceFee();
@@ -1036,7 +1137,12 @@ function FeesTab() {
       setFeeAmount("");
       setFeeCurrency("INR");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to save fee.");
+      const msg = e instanceof Error ? e.message : "Failed to save fee.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -1045,7 +1151,12 @@ function FeesTab() {
       await removeServiceFee.mutateAsync(serviceName);
       toast.success("Fee removed.");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to remove fee.");
+      const msg = e instanceof Error ? e.message : "Failed to remove fee.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -1120,8 +1231,14 @@ function FeesTab() {
           <Button
             data-ocid="admin.fee.save_button"
             onClick={handleSaveFee}
-            disabled={!feeService || !feeAmount || setServiceFee.isPending}
-            className="btn-gold px-6 py-2.5 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2"
+            disabled={
+              !feeService ||
+              !feeAmount ||
+              setServiceFee.isPending ||
+              !isActorReady
+            }
+            title={!isActorReady ? "Connecting to network…" : undefined}
+            className="btn-gold px-6 py-2.5 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2 disabled:opacity-50"
           >
             {setServiceFee.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -1198,7 +1315,8 @@ function FeesTab() {
                           data-ocid={`admin.fee.delete_button.${idx + 1}`}
                           variant="ghost"
                           size="icon"
-                          className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10"
+                          disabled={!isActorReady}
+                          className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10 disabled:opacity-40"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -1243,6 +1361,8 @@ function FeesTab() {
 // ── Coupons Tab ──────────────────────────────────────────────────
 
 function CouponsTab() {
+  const { actor } = useActor();
+  const isActorReady = !!actor;
   const { data: coupons, isLoading } = useListCoupons();
   const createCoupon = useCreateCoupon();
   const toggleCouponStatus = useToggleCouponStatus();
@@ -1295,7 +1415,12 @@ function CouponsTab() {
       setMaxUsage("");
       setOnePerPerson(true);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to create coupon.");
+      const msg = e instanceof Error ? e.message : "Failed to create coupon.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -1307,7 +1432,12 @@ function CouponsTab() {
       });
       toast.success(`Coupon ${coupon.active ? "deactivated" : "activated"}.`);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to toggle coupon.");
+      const msg = e instanceof Error ? e.message : "Failed to toggle coupon.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -1316,7 +1446,12 @@ function CouponsTab() {
       await deleteCoupon.mutateAsync(code);
       toast.success("Coupon deleted.");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete coupon.");
+      const msg = e instanceof Error ? e.message : "Failed to delete coupon.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -1414,9 +1549,14 @@ function CouponsTab() {
             data-ocid="admin.coupon.create.primary_button"
             onClick={handleCreateCoupon}
             disabled={
-              !couponCode || !discountPct || !maxUsage || createCoupon.isPending
+              !couponCode ||
+              !discountPct ||
+              !maxUsage ||
+              createCoupon.isPending ||
+              !isActorReady
             }
-            className="btn-gold px-6 py-2.5 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2"
+            title={!isActorReady ? "Connecting to network…" : undefined}
+            className="btn-gold px-6 py-2.5 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2 disabled:opacity-50"
           >
             {createCoupon.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -1541,13 +1681,21 @@ function CouponsTab() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleToggle(coupon)}
-                          disabled={toggleCouponStatus.isPending}
-                          className={`w-8 h-8 ${
+                          disabled={
+                            toggleCouponStatus.isPending || !isActorReady
+                          }
+                          className={`w-8 h-8 disabled:opacity-40 ${
                             coupon.active
                               ? "text-gold/60 hover:text-gold hover:bg-gold/10"
                               : "text-cream/40 hover:text-cream hover:bg-cream/10"
                           }`}
-                          title={coupon.active ? "Deactivate" : "Activate"}
+                          title={
+                            !isActorReady
+                              ? "Connecting to network…"
+                              : coupon.active
+                                ? "Deactivate"
+                                : "Activate"
+                          }
                         >
                           {coupon.active ? (
                             <X className="w-4 h-4" />
@@ -1561,7 +1709,8 @@ function CouponsTab() {
                               data-ocid={`admin.coupon.delete_button.${idx + 1}`}
                               variant="ghost"
                               size="icon"
-                              className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10"
+                              disabled={!isActorReady}
+                              className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10 disabled:opacity-40"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -1609,6 +1758,8 @@ function CouponsTab() {
 // ── Remedies Tab ─────────────────────────────────────────────────
 
 function RemediesTab() {
+  const { actor } = useActor();
+  const isActorReady = !!actor;
   const { data: bookings } = useBookings();
   const { data: allRemedies, isLoading: remediesLoading } = useAllRemedies();
   const addRemedy = useAddRemedy();
@@ -1645,7 +1796,12 @@ function RemediesTab() {
       setNewTitle("");
       setNewContent("");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to add remedy.");
+      const msg = e instanceof Error ? e.message : "Failed to add remedy.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -1666,7 +1822,12 @@ function RemediesTab() {
       toast.success("Remedy updated.");
       setEditingId(null);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to update remedy.");
+      const msg = e instanceof Error ? e.message : "Failed to update remedy.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -1675,7 +1836,12 @@ function RemediesTab() {
       await deleteRemedy.mutateAsync(id);
       toast.success("Remedy deleted.");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete remedy.");
+      const msg = e instanceof Error ? e.message : "Failed to delete remedy.";
+      toast.error(
+        msg === "Not connected"
+          ? "Still connecting to the network, please wait a moment and try again."
+          : msg,
+      );
     }
   };
 
@@ -1790,9 +1956,15 @@ function RemediesTab() {
                             disabled={
                               !editTitle.trim() ||
                               !editContent.trim() ||
-                              updateRemedy.isPending
+                              updateRemedy.isPending ||
+                              !isActorReady
                             }
-                            className="btn-gold px-5 py-2 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2"
+                            title={
+                              !isActorReady
+                                ? "Connecting to network…"
+                                : undefined
+                            }
+                            className="btn-gold px-5 py-2 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2 disabled:opacity-50"
                           >
                             {updateRemedy.isPending ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -1836,7 +2008,8 @@ function RemediesTab() {
                               variant="ghost"
                               size="icon"
                               onClick={() => handleStartEdit(remedy)}
-                              className="w-8 h-8 text-cream/40 hover:text-gold hover:bg-gold/10"
+                              disabled={!isActorReady}
+                              className="w-8 h-8 text-cream/40 hover:text-gold hover:bg-gold/10 disabled:opacity-40"
                             >
                               <Edit2 className="w-4 h-4" />
                             </Button>
@@ -1846,7 +2019,8 @@ function RemediesTab() {
                                   data-ocid={`admin.remedy.delete_button.${idx + 1}`}
                                   variant="ghost"
                                   size="icon"
-                                  className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10"
+                                  disabled={!isActorReady}
+                                  className="w-8 h-8 text-cream/40 hover:text-destructive hover:bg-destructive/10 disabled:opacity-40"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
@@ -1937,9 +2111,11 @@ function RemediesTab() {
                   disabled={
                     !newTitle.trim() ||
                     !newContent.trim() ||
-                    addRemedy.isPending
+                    addRemedy.isPending ||
+                    !isActorReady
                   }
-                  className="btn-gold px-6 py-2.5 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2"
+                  title={!isActorReady ? "Connecting to network…" : undefined}
+                  className="btn-gold px-6 py-2.5 tracking-widest uppercase text-sm rounded-none inline-flex items-center gap-2 disabled:opacity-50"
                 >
                   {addRemedy.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
