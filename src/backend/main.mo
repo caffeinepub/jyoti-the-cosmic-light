@@ -1,17 +1,31 @@
-import Nat "mo:core/Nat";
-import List "mo:core/List";
-import Time "mo:core/Time";
 import Map "mo:core/Map";
 import Principal "mo:core/Principal";
+import List "mo:core/List";
+import Time "mo:core/Time";
+import Text "mo:core/Text";
+import Array "mo:core/Array";
 import Runtime "mo:core/Runtime";
+import Nat "mo:core/Nat";
+import Char "mo:core/Char";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import Stripe "stripe/stripe";
+import OutCall "http-outcalls/outcall";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
   let accessControlState = AccessControl.initState();
 
   public type UserProfile = { name : Text };
-  type AvailableSlot = { id : Nat; date : Text; time : Text; isBooked : Bool };
+
+  type AvailableSlot = {
+    id : Nat;
+    date : Text;
+    time : Text;
+    isBooked : Bool;
+  };
+
   type Booking = {
     id : Nat;
     clientName : Text;
@@ -32,7 +46,13 @@ actor {
     feeApplied : Nat;
     couponUsed : Text;
   };
-  type ServiceFee = { serviceName : Text; amount : Nat; currency : Text };
+
+  type ServiceFee = {
+    serviceName : Text;
+    amount : Nat;
+    currency : Text;
+  };
+
   type Coupon = {
     code : Text;
     discountPercent : Nat;
@@ -40,6 +60,7 @@ actor {
     usageCount : Nat;
     active : Bool;
   };
+
   type Remedy = {
     id : Nat;
     bookingId : Nat;
@@ -48,6 +69,7 @@ actor {
     content : Text;
     createdAt : Int;
   };
+
   public type Referral = {
     owner : Principal;
     code : Text;
@@ -55,9 +77,14 @@ actor {
     timesUsed : Nat;
     createdAt : Int;
   };
-  type Result<T, E> = { #ok : T; #err : E };
+
+  type Result<T, E> = {
+    #ok : T;
+    #err : E;
+  };
 
   let userProfiles = Map.empty<Principal, UserProfile>();
+
   let slots = Map.empty<Nat, AvailableSlot>();
   let bookings = Map.empty<Nat, Booking>();
   let serviceFees = Map.empty<Text, ServiceFee>();
@@ -68,13 +95,14 @@ actor {
   let userReferralCode = Map.empty<Principal, Text>();
   let userAppliedReferral = Map.empty<Principal, Bool>();
 
-  // Track whether first admin has been claimed
   var firstAdminClaimed = false;
 
   var nextSlotId = 1;
   var nextBookingId = 1;
   var nextRemedyId = 1;
   var nextReferralId = 1;
+
+  var stripeConfiguration : ?Stripe.StripeConfiguration = null;
 
   include MixinAuthorization(accessControlState);
 
@@ -99,7 +127,7 @@ actor {
     userProfiles.add(caller, profile);
   };
 
-  public query ({ caller = _ }) func getAvailableSlots() : async [AvailableSlot] {
+  public query ({ caller }) func getAvailableSlots() : async [AvailableSlot] {
     let availableList = List.empty<AvailableSlot>();
     for ((_, slot) in slots.entries()) {
       if (not slot.isBooked) {
@@ -120,7 +148,7 @@ actor {
     #ok(slotsList.toArray());
   };
 
-  public query ({ caller = _ }) func getServiceFees() : async [ServiceFee] {
+  public query ({ caller }) func getServiceFees() : async [ServiceFee] {
     let feeList = List.empty<ServiceFee>();
     for ((_, fee) in serviceFees.entries()) {
       feeList.add(fee);
@@ -128,7 +156,7 @@ actor {
     feeList.toArray();
   };
 
-  public query ({ caller = _ }) func validateCoupon(code : Text) : async Result<Coupon, Text> {
+  public query ({ caller }) func validateCoupon(code : Text) : async Result<Coupon, Text> {
     switch (coupons.get(code)) {
       case (null) { #err("Coupon not found") };
       case (?coupon) {
@@ -157,10 +185,6 @@ actor {
     question : Text,
     couponCode : ?Text
   ) : async Result<Booking, Text> {
-    if (caller.isAnonymous()) {
-      return #err("Unauthorized: Anonymous users cannot book appointments");
-    };
-
     switch (slots.get(slotId)) {
       case (null) { #err("Slot not found") };
       case (?slot) {
@@ -285,6 +309,20 @@ actor {
             slots.add(booking.slotId, { slot with isBooked = false });
           };
         };
+        #ok(true);
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteBooking(id : Nat) : async Result<Bool, Text> {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      return #err("Unauthorized: Only admins can delete bookings");
+    };
+
+    switch (bookings.get(id)) {
+      case (null) { #err("Booking not found") };
+      case (?_) {
+        bookings.remove(id);
         #ok(true);
       };
     };
@@ -439,25 +477,18 @@ actor {
   };
 
   public query ({ caller }) func isAdmin() : async Bool {
-    // Safe check that never traps - returns false for unregistered/anonymous users
     AccessControl.isAdmin(accessControlState, caller);
   };
 
   public shared ({ caller }) func claimFirstAdmin() : async Bool {
-    // Reject anonymous callers
-    if (caller.isAnonymous()) { 
-      return false;
-    };
+    if (caller.isAnonymous()) { return false };
 
-    // Check if already claimed
     if (firstAdminClaimed) {
       return false;
     };
 
-    // Mark as claimed and assign admin role
     firstAdminClaimed := true;
 
-    // Directly update the userRoles map to register caller as admin
     accessControlState.userRoles.add(caller, #admin);
 
     true;
@@ -465,6 +496,24 @@ actor {
 
   public shared ({ caller = _ }) func forceClaimAdmin(_userSecret : Text) : async Bool { 
     false;
+  };
+
+  func sanitizeText(text : Text, maxLength : Nat) : Text {
+    let sanitized = Text.fromIter(
+      text.chars().map(
+        func(c) {
+          if ((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_' or c == '-') {
+            c;
+          } else { '_' };
+        }
+      )
+    );
+    let length = sanitized.size();
+    if (length > maxLength) {
+      Text.fromIter(sanitized.chars().take(maxLength));
+    } else {
+      sanitized;
+    };
   };
 
   public shared ({ caller }) func generateReferralCode() : async Result<Text, Text> {
@@ -479,7 +528,9 @@ actor {
     switch (userReferralCode.get(caller)) {
       case (?existingCode) { #ok(existingCode) };
       case (null) {
-        let code = caller.toText() # "-" # nextReferralId.toText() # "-" # Time.now().toText();
+        let principalText = caller.toText();
+        let cleanPrincipal = sanitizeText(principalText, 20);
+        let code = cleanPrincipal # "-" # nextReferralId.toText() # "-" # Time.now().toText();
         let referral : Referral = {
           owner = caller;
           code;
@@ -606,5 +657,35 @@ actor {
       balancesList.add((principal, coins));
     };
     #ok(balancesList.toArray());
+  };
+
+  public query func isStripeConfigured() : async Bool {
+    stripeConfiguration != null;
+  };
+
+  public shared ({ caller }) func setStripeConfiguration(config : Stripe.StripeConfiguration) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can perform this action");
+    };
+    stripeConfiguration := ?config;
+  };
+
+  func getStripeConfiguration() : Stripe.StripeConfiguration {
+    switch (stripeConfiguration) {
+      case (null) { Runtime.trap("Stripe needs to be first configured") };
+      case (?value) { value };
+    };
+  };
+
+  public func getStripeSessionStatus(sessionId : Text) : async Stripe.StripeSessionStatus {
+    await Stripe.getSessionStatus(getStripeConfiguration(), sessionId, transform);
+  };
+
+  public shared ({ caller }) func createCheckoutSession(items : [Stripe.ShoppingItem], successUrl : Text, cancelUrl : Text) : async Text {
+    await Stripe.createCheckoutSession(getStripeConfiguration(), caller, items, successUrl, cancelUrl, transform);
+  };
+
+  public query func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
+    OutCall.transform(input);
   };
 };

@@ -96,19 +96,11 @@ export type Result_2 = {
     __kind__: "err";
     err: string;
 };
-export interface AvailableSlot {
-    id: bigint;
-    date: string;
-    time: string;
-    isBooked: boolean;
+export interface TransformationOutput {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
 }
-export type Result_6 = {
-    __kind__: "ok";
-    ok: Array<Remedy>;
-} | {
-    __kind__: "err";
-    err: string;
-};
 export type Result_13 = {
     __kind__: "ok";
     ok: AvailableSlot;
@@ -116,13 +108,6 @@ export type Result_13 = {
     __kind__: "err";
     err: string;
 };
-export interface Coupon {
-    active: boolean;
-    code: string;
-    usageCount: bigint;
-    maxUsage: bigint;
-    discountPercent: bigint;
-}
 export type Result_5 = {
     __kind__: "ok";
     ok: Array<Coupon>;
@@ -130,25 +115,6 @@ export type Result_5 = {
     __kind__: "err";
     err: string;
 };
-export type Result_9 = {
-    __kind__: "ok";
-    ok: string;
-} | {
-    __kind__: "err";
-    err: string;
-};
-export type Result_12 = {
-    __kind__: "ok";
-    ok: Array<[Principal, bigint]>;
-} | {
-    __kind__: "err";
-    err: string;
-};
-export interface ServiceFee {
-    serviceName: string;
-    currency: string;
-    amount: bigint;
-}
 export type Result_1 = {
     __kind__: "ok";
     ok: Remedy;
@@ -170,42 +136,10 @@ export type Result_11 = {
     __kind__: "err";
     err: string;
 };
-export interface Remedy {
-    id: bigint;
-    title: string;
-    content: string;
-    bookingId: bigint;
-    clientName: string;
-    createdAt: bigint;
+export interface TransformationInput {
+    context: Uint8Array;
+    response: http_request_result;
 }
-export type Result = {
-    __kind__: "ok";
-    ok: Coupon;
-} | {
-    __kind__: "err";
-    err: string;
-};
-export type Result_3 = {
-    __kind__: "ok";
-    ok: ServiceFee;
-} | {
-    __kind__: "err";
-    err: string;
-};
-export type Result_10 = {
-    __kind__: "ok";
-    ok: Booking;
-} | {
-    __kind__: "err";
-    err: string;
-};
-export type Result_8 = {
-    __kind__: "ok";
-    ok: Array<AvailableSlot>;
-} | {
-    __kind__: "err";
-    err: string;
-};
 export interface Referral {
     owner: Principal;
     code: string;
@@ -213,13 +147,6 @@ export interface Referral {
     timesUsed: bigint;
     coinsEarned: bigint;
 }
-export type Result_7 = {
-    __kind__: "ok";
-    ok: Array<Booking>;
-} | {
-    __kind__: "err";
-    err: string;
-};
 export interface Booking {
     id: bigint;
     dob: string;
@@ -240,6 +167,120 @@ export interface Booking {
     gender: string;
     slotTime: string;
 }
+export type Result_7 = {
+    __kind__: "ok";
+    ok: Array<Booking>;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type StripeSessionStatus = {
+    __kind__: "completed";
+    completed: {
+        userPrincipal?: string;
+        response: string;
+    };
+} | {
+    __kind__: "failed";
+    failed: {
+        error: string;
+    };
+};
+export interface StripeConfiguration {
+    allowedCountries: Array<string>;
+    secretKey: string;
+}
+export interface AvailableSlot {
+    id: bigint;
+    date: string;
+    time: string;
+    isBooked: boolean;
+}
+export type Result_6 = {
+    __kind__: "ok";
+    ok: Array<Remedy>;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export interface Coupon {
+    active: boolean;
+    code: string;
+    usageCount: bigint;
+    maxUsage: bigint;
+    discountPercent: bigint;
+}
+export type Result_12 = {
+    __kind__: "ok";
+    ok: Array<[Principal, bigint]>;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type Result_9 = {
+    __kind__: "ok";
+    ok: string;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export interface ServiceFee {
+    serviceName: string;
+    currency: string;
+    amount: bigint;
+}
+export interface http_request_result {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
+}
+export interface http_header {
+    value: string;
+    name: string;
+}
+export interface Remedy {
+    id: bigint;
+    title: string;
+    content: string;
+    bookingId: bigint;
+    clientName: string;
+    createdAt: bigint;
+}
+export interface ShoppingItem {
+    productName: string;
+    currency: string;
+    quantity: bigint;
+    priceInCents: bigint;
+    productDescription: string;
+}
+export type Result_3 = {
+    __kind__: "ok";
+    ok: ServiceFee;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type Result_10 = {
+    __kind__: "ok";
+    ok: Booking;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type Result = {
+    __kind__: "ok";
+    ok: Coupon;
+} | {
+    __kind__: "err";
+    err: string;
+};
+export type Result_8 = {
+    __kind__: "ok";
+    ok: Array<AvailableSlot>;
+} | {
+    __kind__: "err";
+    err: string;
+};
 export interface UserProfile {
     name: string;
 }
@@ -259,7 +300,9 @@ export interface backendInterface {
     bookAppointment(clientName: string, email: string, service: string, slotId: bigint, dob: string, tob: string, birthPlace: string, lat: number, lng: number, gender: string, question: string, couponCode: string | null): Promise<Result_10>;
     cancelBooking(id: bigint): Promise<Result_2>;
     claimFirstAdmin(): Promise<boolean>;
+    createCheckoutSession(items: Array<ShoppingItem>, successUrl: string, cancelUrl: string): Promise<string>;
     createCoupon(code: string, discountPercent: bigint, maxUsage: bigint): Promise<Result>;
+    deleteBooking(id: bigint): Promise<Result_2>;
     deleteCoupon(code: string): Promise<Result_2>;
     deleteRemedy(id: bigint): Promise<Result_2>;
     forceClaimAdmin(_userSecret: string): Promise<boolean>;
@@ -274,20 +317,24 @@ export interface backendInterface {
     getReferralCode(): Promise<string | null>;
     getRemediesForBooking(bookingId: bigint): Promise<Result_6>;
     getServiceFees(): Promise<Array<ServiceFee>>;
+    getStripeSessionStatus(sessionId: string): Promise<StripeSessionStatus>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isAdmin(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
+    isStripeConfigured(): Promise<boolean>;
     listCoupons(): Promise<Result_5>;
     redeemCoins(userPrincipal: Principal, amount: bigint): Promise<Result_4>;
     removeServiceFee(serviceName: string): Promise<Result_2>;
     removeSlot(id: bigint): Promise<Result_2>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     setServiceFee(serviceName: string, amount: bigint, currency: string): Promise<Result_3>;
+    setStripeConfiguration(config: StripeConfiguration): Promise<void>;
     toggleCouponStatus(code: string, isActive: boolean): Promise<Result_2>;
+    transform(input: TransformationInput): Promise<TransformationOutput>;
     updateRemedy(id: bigint, title: string, content: string): Promise<Result_1>;
     validateCoupon(code: string): Promise<Result>;
 }
-import type { AvailableSlot as _AvailableSlot, Booking as _Booking, Coupon as _Coupon, Referral as _Referral, Remedy as _Remedy, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, ServiceFee as _ServiceFee, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
+import type { AvailableSlot as _AvailableSlot, Booking as _Booking, Coupon as _Coupon, Referral as _Referral, Remedy as _Remedy, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, ServiceFee as _ServiceFee, StripeSessionStatus as _StripeSessionStatus, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
@@ -430,6 +477,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async createCheckoutSession(arg0: Array<ShoppingItem>, arg1: string, arg2: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createCheckoutSession(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createCheckoutSession(arg0, arg1, arg2);
+            return result;
+        }
+    }
     async createCoupon(arg0: string, arg1: bigint, arg2: bigint): Promise<Result> {
         if (this.processError) {
             try {
@@ -442,6 +503,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.createCoupon(arg0, arg1, arg2);
             return from_candid_Result_n18(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async deleteBooking(arg0: bigint): Promise<Result_2> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteBooking(arg0);
+                return from_candid_Result_2_n16(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteBooking(arg0);
+            return from_candid_Result_2_n16(this._uploadFile, this._downloadFile, result);
         }
     }
     async deleteCoupon(arg0: string): Promise<Result_2> {
@@ -640,6 +715,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getStripeSessionStatus(arg0: string): Promise<StripeSessionStatus> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getStripeSessionStatus(arg0);
+                return from_candid_StripeSessionStatus_n30(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getStripeSessionStatus(arg0);
+            return from_candid_StripeSessionStatus_n30(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
         if (this.processError) {
             try {
@@ -682,32 +771,46 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async isStripeConfigured(): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isStripeConfigured();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isStripeConfigured();
+            return result;
+        }
+    }
     async listCoupons(): Promise<Result_5> {
         if (this.processError) {
             try {
                 const result = await this.actor.listCoupons();
-                return from_candid_Result_5_n30(this._uploadFile, this._downloadFile, result);
+                return from_candid_Result_5_n33(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.listCoupons();
-            return from_candid_Result_5_n30(this._uploadFile, this._downloadFile, result);
+            return from_candid_Result_5_n33(this._uploadFile, this._downloadFile, result);
         }
     }
     async redeemCoins(arg0: Principal, arg1: bigint): Promise<Result_4> {
         if (this.processError) {
             try {
                 const result = await this.actor.redeemCoins(arg0, arg1);
-                return from_candid_Result_4_n32(this._uploadFile, this._downloadFile, result);
+                return from_candid_Result_4_n35(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.redeemCoins(arg0, arg1);
-            return from_candid_Result_4_n32(this._uploadFile, this._downloadFile, result);
+            return from_candid_Result_4_n35(this._uploadFile, this._downloadFile, result);
         }
     }
     async removeServiceFee(arg0: string): Promise<Result_2> {
@@ -756,14 +859,28 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.setServiceFee(arg0, arg1, arg2);
-                return from_candid_Result_3_n34(this._uploadFile, this._downloadFile, result);
+                return from_candid_Result_3_n37(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.setServiceFee(arg0, arg1, arg2);
-            return from_candid_Result_3_n34(this._uploadFile, this._downloadFile, result);
+            return from_candid_Result_3_n37(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async setStripeConfiguration(arg0: StripeConfiguration): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setStripeConfiguration(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setStripeConfiguration(arg0);
+            return result;
         }
     }
     async toggleCouponStatus(arg0: string, arg1: boolean): Promise<Result_2> {
@@ -778,6 +895,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.toggleCouponStatus(arg0, arg1);
             return from_candid_Result_2_n16(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async transform(arg0: TransformationInput): Promise<TransformationOutput> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.transform(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.transform(arg0);
+            return result;
         }
     }
     async updateRemedy(arg0: bigint, arg1: string, arg2: string): Promise<Result_1> {
@@ -827,14 +958,14 @@ function from_candid_Result_1_n1(_uploadFile: (file: ExternalBlob) => Promise<Ui
 function from_candid_Result_2_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Result_2): Result_2 {
     return from_candid_variant_n17(_uploadFile, _downloadFile, value);
 }
-function from_candid_Result_3_n34(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Result_3): Result_3 {
-    return from_candid_variant_n35(_uploadFile, _downloadFile, value);
+function from_candid_Result_3_n37(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Result_3): Result_3 {
+    return from_candid_variant_n38(_uploadFile, _downloadFile, value);
 }
-function from_candid_Result_4_n32(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Result_4): Result_4 {
-    return from_candid_variant_n33(_uploadFile, _downloadFile, value);
+function from_candid_Result_4_n35(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Result_4): Result_4 {
+    return from_candid_variant_n36(_uploadFile, _downloadFile, value);
 }
-function from_candid_Result_5_n30(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Result_5): Result_5 {
-    return from_candid_variant_n31(_uploadFile, _downloadFile, value);
+function from_candid_Result_5_n33(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Result_5): Result_5 {
+    return from_candid_variant_n34(_uploadFile, _downloadFile, value);
 }
 function from_candid_Result_6_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Result_6): Result_6 {
     return from_candid_variant_n21(_uploadFile, _downloadFile, value);
@@ -851,6 +982,9 @@ function from_candid_Result_9_n9(_uploadFile: (file: ExternalBlob) => Promise<Ui
 function from_candid_Result_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Result): Result {
     return from_candid_variant_n19(_uploadFile, _downloadFile, value);
 }
+function from_candid_StripeSessionStatus_n30(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _StripeSessionStatus): StripeSessionStatus {
+    return from_candid_variant_n31(_uploadFile, _downloadFile, value);
+}
 function from_candid_UserRole_n27(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
     return from_candid_variant_n28(_uploadFile, _downloadFile, value);
 }
@@ -859,6 +993,18 @@ function from_candid_opt_n26(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
 }
 function from_candid_opt_n29(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n32(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    userPrincipal: [] | [string];
+    response: string;
+}): {
+    userPrincipal?: string;
+    response: string;
+} {
+    return {
+        userPrincipal: record_opt_to_undefined(from_candid_opt_n29(_uploadFile, _downloadFile, value.userPrincipal)),
+        response: value.response
+    };
 }
 function from_candid_variant_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     ok: string;
@@ -1022,6 +1168,35 @@ function from_candid_variant_n28(_uploadFile: (file: ExternalBlob) => Promise<Ui
     return "admin" in value ? UserRole.admin : "user" in value ? UserRole.user : "guest" in value ? UserRole.guest : value;
 }
 function from_candid_variant_n31(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    completed: {
+        userPrincipal: [] | [string];
+        response: string;
+    };
+} | {
+    failed: {
+        error: string;
+    };
+}): {
+    __kind__: "completed";
+    completed: {
+        userPrincipal?: string;
+        response: string;
+    };
+} | {
+    __kind__: "failed";
+    failed: {
+        error: string;
+    };
+} {
+    return "completed" in value ? {
+        __kind__: "completed",
+        completed: from_candid_record_n32(_uploadFile, _downloadFile, value.completed)
+    } : "failed" in value ? {
+        __kind__: "failed",
+        failed: value.failed
+    } : value;
+}
+function from_candid_variant_n34(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     ok: Array<_Coupon>;
 } | {
     err: string;
@@ -1040,7 +1215,7 @@ function from_candid_variant_n31(_uploadFile: (file: ExternalBlob) => Promise<Ui
         err: value.err
     } : value;
 }
-function from_candid_variant_n33(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n36(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     ok: bigint;
 } | {
     err: string;
@@ -1059,7 +1234,7 @@ function from_candid_variant_n33(_uploadFile: (file: ExternalBlob) => Promise<Ui
         err: value.err
     } : value;
 }
-function from_candid_variant_n35(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n38(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     ok: _ServiceFee;
 } | {
     err: string;

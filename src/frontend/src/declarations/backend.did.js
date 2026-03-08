@@ -70,6 +70,13 @@ export const Booking = IDL.Record({
 });
 export const Result_10 = IDL.Variant({ 'ok' : Booking, 'err' : IDL.Text });
 export const Result_2 = IDL.Variant({ 'ok' : IDL.Bool, 'err' : IDL.Text });
+export const ShoppingItem = IDL.Record({
+  'productName' : IDL.Text,
+  'currency' : IDL.Text,
+  'quantity' : IDL.Nat,
+  'priceInCents' : IDL.Nat,
+  'productDescription' : IDL.Text,
+});
 export const Coupon = IDL.Record({
   'active' : IDL.Bool,
   'code' : IDL.Text,
@@ -96,12 +103,41 @@ export const ServiceFee = IDL.Record({
   'currency' : IDL.Text,
   'amount' : IDL.Nat,
 });
+export const StripeSessionStatus = IDL.Variant({
+  'completed' : IDL.Record({
+    'userPrincipal' : IDL.Opt(IDL.Text),
+    'response' : IDL.Text,
+  }),
+  'failed' : IDL.Record({ 'error' : IDL.Text }),
+});
 export const Result_5 = IDL.Variant({
   'ok' : IDL.Vec(Coupon),
   'err' : IDL.Text,
 });
 export const Result_4 = IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text });
 export const Result_3 = IDL.Variant({ 'ok' : ServiceFee, 'err' : IDL.Text });
+export const StripeConfiguration = IDL.Record({
+  'allowedCountries' : IDL.Vec(IDL.Text),
+  'secretKey' : IDL.Text,
+});
+export const http_header = IDL.Record({
+  'value' : IDL.Text,
+  'name' : IDL.Text,
+});
+export const http_request_result = IDL.Record({
+  'status' : IDL.Nat,
+  'body' : IDL.Vec(IDL.Nat8),
+  'headers' : IDL.Vec(http_header),
+});
+export const TransformationInput = IDL.Record({
+  'context' : IDL.Vec(IDL.Nat8),
+  'response' : http_request_result,
+});
+export const TransformationOutput = IDL.Record({
+  'status' : IDL.Nat,
+  'body' : IDL.Vec(IDL.Nat8),
+  'headers' : IDL.Vec(http_header),
+});
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
@@ -135,7 +171,13 @@ export const idlService = IDL.Service({
     ),
   'cancelBooking' : IDL.Func([IDL.Nat], [Result_2], []),
   'claimFirstAdmin' : IDL.Func([], [IDL.Bool], []),
+  'createCheckoutSession' : IDL.Func(
+      [IDL.Vec(ShoppingItem), IDL.Text, IDL.Text],
+      [IDL.Text],
+      [],
+    ),
   'createCoupon' : IDL.Func([IDL.Text, IDL.Nat, IDL.Nat], [Result], []),
+  'deleteBooking' : IDL.Func([IDL.Nat], [Result_2], []),
   'deleteCoupon' : IDL.Func([IDL.Text], [Result_2], []),
   'deleteRemedy' : IDL.Func([IDL.Nat], [Result_2], []),
   'forceClaimAdmin' : IDL.Func([IDL.Text], [IDL.Bool], []),
@@ -150,6 +192,7 @@ export const idlService = IDL.Service({
   'getReferralCode' : IDL.Func([], [IDL.Opt(IDL.Text)], ['query']),
   'getRemediesForBooking' : IDL.Func([IDL.Nat], [Result_6], ['query']),
   'getServiceFees' : IDL.Func([], [IDL.Vec(ServiceFee)], ['query']),
+  'getStripeSessionStatus' : IDL.Func([IDL.Text], [StripeSessionStatus], []),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
@@ -157,13 +200,20 @@ export const idlService = IDL.Service({
     ),
   'isAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'isStripeConfigured' : IDL.Func([], [IDL.Bool], ['query']),
   'listCoupons' : IDL.Func([], [Result_5], ['query']),
   'redeemCoins' : IDL.Func([IDL.Principal, IDL.Nat], [Result_4], []),
   'removeServiceFee' : IDL.Func([IDL.Text], [Result_2], []),
   'removeSlot' : IDL.Func([IDL.Nat], [Result_2], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'setServiceFee' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [Result_3], []),
+  'setStripeConfiguration' : IDL.Func([StripeConfiguration], [], []),
   'toggleCouponStatus' : IDL.Func([IDL.Text, IDL.Bool], [Result_2], []),
+  'transform' : IDL.Func(
+      [TransformationInput],
+      [TransformationOutput],
+      ['query'],
+    ),
   'updateRemedy' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [Result_1], []),
   'validateCoupon' : IDL.Func([IDL.Text], [Result], ['query']),
 });
@@ -227,6 +277,13 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result_10 = IDL.Variant({ 'ok' : Booking, 'err' : IDL.Text });
   const Result_2 = IDL.Variant({ 'ok' : IDL.Bool, 'err' : IDL.Text });
+  const ShoppingItem = IDL.Record({
+    'productName' : IDL.Text,
+    'currency' : IDL.Text,
+    'quantity' : IDL.Nat,
+    'priceInCents' : IDL.Nat,
+    'productDescription' : IDL.Text,
+  });
   const Coupon = IDL.Record({
     'active' : IDL.Bool,
     'code' : IDL.Text,
@@ -247,9 +304,35 @@ export const idlFactory = ({ IDL }) => {
     'currency' : IDL.Text,
     'amount' : IDL.Nat,
   });
+  const StripeSessionStatus = IDL.Variant({
+    'completed' : IDL.Record({
+      'userPrincipal' : IDL.Opt(IDL.Text),
+      'response' : IDL.Text,
+    }),
+    'failed' : IDL.Record({ 'error' : IDL.Text }),
+  });
   const Result_5 = IDL.Variant({ 'ok' : IDL.Vec(Coupon), 'err' : IDL.Text });
   const Result_4 = IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text });
   const Result_3 = IDL.Variant({ 'ok' : ServiceFee, 'err' : IDL.Text });
+  const StripeConfiguration = IDL.Record({
+    'allowedCountries' : IDL.Vec(IDL.Text),
+    'secretKey' : IDL.Text,
+  });
+  const http_header = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
+  const http_request_result = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(http_header),
+  });
+  const TransformationInput = IDL.Record({
+    'context' : IDL.Vec(IDL.Nat8),
+    'response' : http_request_result,
+  });
+  const TransformationOutput = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(http_header),
+  });
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
@@ -283,7 +366,13 @@ export const idlFactory = ({ IDL }) => {
       ),
     'cancelBooking' : IDL.Func([IDL.Nat], [Result_2], []),
     'claimFirstAdmin' : IDL.Func([], [IDL.Bool], []),
+    'createCheckoutSession' : IDL.Func(
+        [IDL.Vec(ShoppingItem), IDL.Text, IDL.Text],
+        [IDL.Text],
+        [],
+      ),
     'createCoupon' : IDL.Func([IDL.Text, IDL.Nat, IDL.Nat], [Result], []),
+    'deleteBooking' : IDL.Func([IDL.Nat], [Result_2], []),
     'deleteCoupon' : IDL.Func([IDL.Text], [Result_2], []),
     'deleteRemedy' : IDL.Func([IDL.Nat], [Result_2], []),
     'forceClaimAdmin' : IDL.Func([IDL.Text], [IDL.Bool], []),
@@ -298,6 +387,7 @@ export const idlFactory = ({ IDL }) => {
     'getReferralCode' : IDL.Func([], [IDL.Opt(IDL.Text)], ['query']),
     'getRemediesForBooking' : IDL.Func([IDL.Nat], [Result_6], ['query']),
     'getServiceFees' : IDL.Func([], [IDL.Vec(ServiceFee)], ['query']),
+    'getStripeSessionStatus' : IDL.Func([IDL.Text], [StripeSessionStatus], []),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
@@ -305,13 +395,20 @@ export const idlFactory = ({ IDL }) => {
       ),
     'isAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'isStripeConfigured' : IDL.Func([], [IDL.Bool], ['query']),
     'listCoupons' : IDL.Func([], [Result_5], ['query']),
     'redeemCoins' : IDL.Func([IDL.Principal, IDL.Nat], [Result_4], []),
     'removeServiceFee' : IDL.Func([IDL.Text], [Result_2], []),
     'removeSlot' : IDL.Func([IDL.Nat], [Result_2], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'setServiceFee' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [Result_3], []),
+    'setStripeConfiguration' : IDL.Func([StripeConfiguration], [], []),
     'toggleCouponStatus' : IDL.Func([IDL.Text, IDL.Bool], [Result_2], []),
+    'transform' : IDL.Func(
+        [TransformationInput],
+        [TransformationOutput],
+        ['query'],
+      ),
     'updateRemedy' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [Result_1], []),
     'validateCoupon' : IDL.Func([IDL.Text], [Result], ['query']),
   });

@@ -1,11 +1,16 @@
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
 import Principal "mo:core/Principal";
-import List "mo:core/List";
+import Stripe "stripe/stripe";
 
 module {
-  type UserProfile = { name : Text };
-  type AvailableSlot = { id : Nat; date : Text; time : Text; isBooked : Bool };
+  type AvailableSlot = {
+    id : Nat;
+    date : Text;
+    time : Text;
+    isBooked : Bool;
+  };
+
   type Booking = {
     id : Nat;
     clientName : Text;
@@ -26,7 +31,13 @@ module {
     feeApplied : Nat;
     couponUsed : Text;
   };
-  type ServiceFee = { serviceName : Text; amount : Nat; currency : Text };
+
+  type ServiceFee = {
+    serviceName : Text;
+    amount : Nat;
+    currency : Text;
+  };
+
   type Coupon = {
     code : Text;
     discountPercent : Nat;
@@ -34,6 +45,7 @@ module {
     usageCount : Nat;
     active : Bool;
   };
+
   type Remedy = {
     id : Nat;
     bookingId : Nat;
@@ -43,47 +55,59 @@ module {
     createdAt : Int;
   };
 
-  type OldActor = {
-    userProfiles : Map.Map<Principal, UserProfile>;
-    slots : Map.Map<Nat, AvailableSlot>;
-    bookings : Map.Map<Nat, Booking>;
-    serviceFees : Map.Map<Text, ServiceFee>;
-    coupons : Map.Map<Text, Coupon>;
-    remedies : Map.Map<Nat, Remedy>;
-    nextSlotId : Nat;
-    nextBookingId : Nat;
-    nextRemedyId : Nat;
-    adminAssigned : Bool;
-    firstAdminPrincipal : ?Principal;
+  type Referral = {
+    owner : Principal;
+    code : Text;
+    coinsEarned : Nat;
+    timesUsed : Nat;
+    createdAt : Int;
   };
 
-  type NewActor = {
-    userProfiles : Map.Map<Principal, UserProfile>;
+  type OldUserProfile = { name : Text };
+
+  type OldActor = {
+    userProfiles : Map.Map<Principal, OldUserProfile>;
     slots : Map.Map<Nat, AvailableSlot>;
     bookings : Map.Map<Nat, Booking>;
     serviceFees : Map.Map<Text, ServiceFee>;
     coupons : Map.Map<Text, Coupon>;
     remedies : Map.Map<Nat, Remedy>;
+    referrals : Map.Map<Text, Referral>;
+    userCoinBalances : Map.Map<Principal, Nat>;
+    userReferralCode : Map.Map<Principal, Text>;
+    userAppliedReferral : Map.Map<Principal, Bool>;
+    firstAdminClaimed : Bool;
     nextSlotId : Nat;
     nextBookingId : Nat;
     nextRemedyId : Nat;
-    adminAssigned : Bool;
-    firstAdminPrincipal : ?Principal;
+    nextReferralId : Nat;
+  };
+
+  type NewUserProfile = { name : Text };
+
+  type NewActor = {
+    userProfiles : Map.Map<Principal, NewUserProfile>;
+    slots : Map.Map<Nat, AvailableSlot>;
+    bookings : Map.Map<Nat, Booking>;
+    serviceFees : Map.Map<Text, ServiceFee>;
+    coupons : Map.Map<Text, Coupon>;
+    remedies : Map.Map<Nat, Remedy>;
+    referrals : Map.Map<Text, Referral>;
+    userCoinBalances : Map.Map<Principal, Nat>;
+    userReferralCode : Map.Map<Principal, Text>;
+    userAppliedReferral : Map.Map<Principal, Bool>;
+    firstAdminClaimed : Bool;
+    nextSlotId : Nat;
+    nextBookingId : Nat;
+    nextRemedyId : Nat;
+    nextReferralId : Nat;
+    stripeConfiguration : ?Stripe.StripeConfiguration;
   };
 
   public func run(old : OldActor) : NewActor {
     {
-      userProfiles = old.userProfiles;
-      slots = old.slots;
-      bookings = old.bookings;
-      serviceFees = old.serviceFees;
-      coupons = old.coupons;
-      remedies = old.remedies;
-      nextSlotId = old.nextSlotId;
-      nextBookingId = old.nextBookingId;
-      nextRemedyId = old.nextRemedyId;
-      adminAssigned = old.adminAssigned;
-      firstAdminPrincipal = old.firstAdminPrincipal;
+      old with
+      stripeConfiguration = null;
     };
   };
 };

@@ -91,10 +91,40 @@ export interface ServiceFee {
   'currency' : string,
   'amount' : bigint,
 }
+export interface ShoppingItem {
+  'productName' : string,
+  'currency' : string,
+  'quantity' : bigint,
+  'priceInCents' : bigint,
+  'productDescription' : string,
+}
+export interface StripeConfiguration {
+  'allowedCountries' : Array<string>,
+  'secretKey' : string,
+}
+export type StripeSessionStatus = {
+    'completed' : { 'userPrincipal' : [] | [string], 'response' : string }
+  } |
+  { 'failed' : { 'error' : string } };
+export interface TransformationInput {
+  'context' : Uint8Array,
+  'response' : http_request_result,
+}
+export interface TransformationOutput {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
+}
 export interface UserProfile { 'name' : string }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface http_header { 'value' : string, 'name' : string }
+export interface http_request_result {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
+}
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addRemedy' : ActorMethod<[bigint, string, string, string], Result_1>,
@@ -122,7 +152,12 @@ export interface _SERVICE {
   >,
   'cancelBooking' : ActorMethod<[bigint], Result_2>,
   'claimFirstAdmin' : ActorMethod<[], boolean>,
+  'createCheckoutSession' : ActorMethod<
+    [Array<ShoppingItem>, string, string],
+    string
+  >,
   'createCoupon' : ActorMethod<[string, bigint, bigint], Result>,
+  'deleteBooking' : ActorMethod<[bigint], Result_2>,
   'deleteCoupon' : ActorMethod<[string], Result_2>,
   'deleteRemedy' : ActorMethod<[bigint], Result_2>,
   'forceClaimAdmin' : ActorMethod<[string], boolean>,
@@ -137,16 +172,20 @@ export interface _SERVICE {
   'getReferralCode' : ActorMethod<[], [] | [string]>,
   'getRemediesForBooking' : ActorMethod<[bigint], Result_6>,
   'getServiceFees' : ActorMethod<[], Array<ServiceFee>>,
+  'getStripeSessionStatus' : ActorMethod<[string], StripeSessionStatus>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isAdmin' : ActorMethod<[], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'isStripeConfigured' : ActorMethod<[], boolean>,
   'listCoupons' : ActorMethod<[], Result_5>,
   'redeemCoins' : ActorMethod<[Principal, bigint], Result_4>,
   'removeServiceFee' : ActorMethod<[string], Result_2>,
   'removeSlot' : ActorMethod<[bigint], Result_2>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'setServiceFee' : ActorMethod<[string, bigint, string], Result_3>,
+  'setStripeConfiguration' : ActorMethod<[StripeConfiguration], undefined>,
   'toggleCouponStatus' : ActorMethod<[string, boolean], Result_2>,
+  'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
   'updateRemedy' : ActorMethod<[bigint, string, string], Result_1>,
   'validateCoupon' : ActorMethod<[string], Result>,
 }
