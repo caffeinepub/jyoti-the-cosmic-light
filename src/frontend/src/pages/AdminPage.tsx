@@ -64,39 +64,10 @@ import type {
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
-// ── useActorReady: retry pattern to recover from actor init failure on live site ──
-// The live site doesn't have caffeineAdminToken in the URL, so
-// _initializeAccessControlWithSecret may block/fail. If actor is still null
-// after 4 s, we do a one-time page reload to let useActor retry cleanly.
+// ── useActorReady: non-blocking — just exposes whether actor is available ──
+// Never reloads the page or blocks rendering.
 function useActorReady() {
   const { actor } = useActor();
-  const retriedRef = useRef(false);
-
-  useEffect(() => {
-    if (actor) return; // already connected — nothing to do
-    if (retriedRef.current) return; // already retried once
-    const alreadyRetried =
-      sessionStorage.getItem("dujyoti_actor_retry") === "1";
-    if (alreadyRetried) return; // don't retry more than once
-
-    const t = setTimeout(() => {
-      if (!actor) {
-        retriedRef.current = true;
-        sessionStorage.setItem("dujyoti_actor_retry", "1");
-        window.location.reload();
-      }
-    }, 4000);
-
-    return () => clearTimeout(t);
-  }, [actor]);
-
-  // Clear the retry flag once we're connected so future navigations don't skip retries
-  useEffect(() => {
-    if (actor) {
-      sessionStorage.removeItem("dujyoti_actor_retry");
-    }
-  }, [actor]);
-
   return { actor, isReady: !!actor };
 }
 import {
@@ -445,32 +416,8 @@ function AdminUnauthorized({
 function AdminDashboard() {
   const { isReady } = useActorReady();
 
-  // Show a full-page connecting screen while actor is not yet available.
-  // useActorReady will auto-reload once if it stays null for >4 s.
-  if (!isReady) {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center px-6"
-        style={{ background: "oklch(0.09 0.025 260)" }}
-        data-ocid="admin.loading_state"
-      >
-        <div className="text-center max-w-sm w-full">
-          <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
-            <Shield className="w-8 h-8 text-gold" />
-          </div>
-          <h2 className="font-display text-2xl text-cream mb-3">
-            Connecting to network…
-          </h2>
-          <div className="gold-divider w-20 mx-auto mb-6" />
-          <Loader2 className="w-6 h-6 text-gold animate-spin mx-auto mb-4" />
-          <p className="font-body text-cream/50 text-sm tracking-wider">
-            Establishing a secure connection. This may take a moment.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+  // Render dashboard immediately. Tabs handle their own loading/disabled states.
+  // If actor isn't ready yet, show a slim inline banner — never block the whole page.
   return (
     <div
       className="min-h-screen pt-24 px-4 sm:px-6"
@@ -491,6 +438,19 @@ function AdminDashboard() {
           <h1 className="font-display text-4xl text-cream">दूjyoti Dashboard</h1>
           <div className="gold-divider w-24 mt-4" />
         </div>
+
+        {/* Network readiness banner — shows only briefly while actor initialises */}
+        {!isReady && (
+          <div
+            data-ocid="admin.loading_state"
+            className="flex items-center gap-3 border border-gold/20 bg-gold/5 rounded-sm px-4 py-3 mb-6"
+          >
+            <Loader2 className="w-4 h-4 text-gold animate-spin flex-shrink-0" />
+            <p className="font-body text-cream/60 text-sm tracking-wider">
+              Connecting to network… actions will be enabled shortly.
+            </p>
+          </div>
+        )}
 
         {/* Tabs */}
         <Tabs defaultValue="availability">
