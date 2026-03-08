@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { useQueryClient } from "@tanstack/react-query";
+
 import {
   Calendar,
   Check,
@@ -99,21 +99,62 @@ const ADMIN_TAB_CLS =
 export function AdminPage() {
   const { identity, login, loginStatus, isInitializing } =
     useInternetIdentity();
-  const { isFetching: isActorFetching } = useActor();
+  const { actor, isFetching: isActorFetching } = useActor();
   const { data: isAdminUser, isLoading: isAdminLoading } = useIsAdmin();
+  const claimFirstAdmin = useClaimFirstAdmin();
+
+  // Auto-claim state
+  const [autoClaimAttempted, setAutoClaimAttempted] = useState(false);
+  const [autoClaimFailed, setAutoClaimFailed] = useState(false);
 
   // Add a timeout so loading never spins forever after login
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setLoadingTimedOut(true), 20000);
+    const timer = setTimeout(() => setLoadingTimedOut(true), 8000);
     return () => clearTimeout(timer);
   }, []);
 
   // Determine if identity is a genuine authenticated (non-anonymous) principal
   const isAuthenticated = !!identity && !identity.getPrincipal().isAnonymous();
 
+  // Auto-attempt claimFirstAdmin when authenticated, actor ready, not admin yet
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      actor &&
+      !isAdminUser &&
+      !autoClaimAttempted &&
+      !isAdminLoading &&
+      !isActorFetching
+    ) {
+      setAutoClaimAttempted(true);
+      claimFirstAdmin
+        .mutateAsync()
+        .then((success) => {
+          if (success) {
+            // Admin claim succeeded — reload so isAdmin() re-runs with the new role
+            window.location.reload();
+          } else {
+            // Admin slot already taken by a different identity
+            setAutoClaimFailed(true);
+          }
+        })
+        .catch(() => {
+          setAutoClaimFailed(true);
+        });
+    }
+  }, [
+    isAuthenticated,
+    actor,
+    isAdminUser,
+    autoClaimAttempted,
+    isAdminLoading,
+    isActorFetching,
+    claimFirstAdmin,
+  ]);
+
   // Show loading while initializing auth, building the actor, or checking admin status.
-  // Stop loading after 12 seconds regardless to prevent infinite spinner.
+  // Stop loading after 20 seconds regardless to prevent infinite spinner.
   const isLoading =
     !loadingTimedOut &&
     (isInitializing ||
@@ -127,8 +168,41 @@ export function AdminPage() {
     return <AdminLogin onLogin={login} loginStatus={loginStatus} />;
   }
 
+  // Authenticated but not yet admin — show claiming screen or access denied
   if (!isAdminUser) {
-    return <AdminUnauthorized />;
+    const handleManualClaim = () => {
+      claimFirstAdmin
+        .mutateAsync()
+        .then((success) => {
+          if (success) {
+            window.location.reload();
+          } else {
+            setAutoClaimFailed(true);
+          }
+        })
+        .catch(() => setAutoClaimFailed(true));
+    };
+
+    // Still attempting auto-claim (or waiting for actor to settle)
+    if (!autoClaimAttempted || claimFirstAdmin.isPending) {
+      return <AdminClaiming onManualClaim={handleManualClaim} />;
+    }
+    // Auto-claim definitively failed (admin already assigned to someone else)
+    if (autoClaimFailed) {
+      return (
+        <AdminUnauthorized
+          identity={identity}
+          isClaimPending={claimFirstAdmin.isPending}
+          onRetry={() => {
+            setAutoClaimAttempted(false);
+            setAutoClaimFailed(false);
+          }}
+          onManualClaim={handleManualClaim}
+        />
+      );
+    }
+    // Auto-claim attempt made but result unclear — show claiming screen while we wait
+    return <AdminClaiming onManualClaim={handleManualClaim} />;
   }
 
   return <AdminDashboard />;
@@ -144,6 +218,56 @@ function AdminLoading() {
       data-ocid="admin.loading_state"
     >
       <Loader2 className="w-8 h-8 text-gold animate-spin" />
+    </div>
+  );
+}
+
+function AdminClaiming({ onManualClaim }: { onManualClaim: () => void }) {
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setTimedOut(true), 10000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center px-6"
+      style={{ background: "oklch(0.09 0.025 260)" }}
+      data-ocid="admin.loading_state"
+    >
+      <div className="text-center max-w-sm w-full">
+        {!timedOut ? (
+          <>
+            <Loader2 className="w-8 h-8 text-gold animate-spin mx-auto mb-4" />
+            <p className="font-body text-cream/60 text-sm tracking-wider">
+              Verifying admin access…
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="w-16 h-16 border-2 border-gold/40 rounded-sm flex items-center justify-center mx-auto mb-8">
+              <Shield className="w-8 h-8 text-gold" />
+            </div>
+            <h2 className="font-display text-2xl text-cream mb-3">
+              Taking too long…
+            </h2>
+            <div className="gold-divider w-20 mx-auto mb-6" />
+            <p className="font-body text-cream/60 text-sm mb-8 leading-relaxed">
+              Verification is taking longer than expected. Click below to try
+              claiming admin access manually.
+            </p>
+            <Button
+              onClick={onManualClaim}
+              data-ocid="admin.claim.primary_button"
+              className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Try Claiming Admin
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -189,48 +313,25 @@ function AdminLogin({
   );
 }
 
-function AdminUnauthorized() {
+function AdminUnauthorized({
+  identity: identityProp,
+  onRetry,
+  onManualClaim,
+  isClaimPending,
+}: {
+  identity: ReturnType<typeof useInternetIdentity>["identity"];
+  onRetry: () => void;
+  onManualClaim: () => void;
+  isClaimPending: boolean;
+}) {
   const { clear } = useInternetIdentity();
-  const claimFirstAdmin = useClaimFirstAdmin();
-  const queryClient = useQueryClient();
-  const [claimError, setClaimError] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const handleRecheck = async () => {
-    setIsRefreshing(true);
-    setClaimError(null);
-    await queryClient.invalidateQueries({ queryKey: ["isAdmin"] });
-    await queryClient.refetchQueries({ queryKey: ["isAdmin"] });
-    await queryClient.invalidateQueries({ queryKey: ["actor"] });
-    setTimeout(() => {
-      setIsRefreshing(false);
-      window.location.reload();
-    }, 1000);
-  };
+  const principal = identityProp?.getPrincipal().toString() ?? null;
 
   const handleSignOut = () => {
     clear();
     setTimeout(() => {
       window.location.href = window.location.pathname;
     }, 400);
-  };
-
-  const handleClaimFirstTime = async () => {
-    setClaimError(null);
-    try {
-      const success = await claimFirstAdmin.mutateAsync();
-      if (success) {
-        window.location.reload();
-      } else {
-        setClaimError(
-          "An admin is already registered. Please sign out and sign in with your original admin identity.",
-        );
-      }
-    } catch {
-      setClaimError(
-        "An admin is already registered. Please sign out and sign in with your original admin identity.",
-      );
-    }
   };
 
   return (
@@ -246,75 +347,64 @@ function AdminUnauthorized() {
         <h1 className="font-display text-3xl text-cream mb-3">Access Denied</h1>
         <div className="gold-divider w-20 mx-auto mb-6" />
 
-        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6">
-          <p className="font-body text-cream/80 text-sm leading-relaxed">
-            Your Internet Identity is not registered as admin. If you just
-            signed in, try clicking{" "}
-            <strong className="text-gold">"Re-check Admin Status"</strong>. If
-            that doesn't work, sign out and sign back in with the same device
-            you used when you first claimed admin access.
-          </p>
-        </div>
-
-        {claimError && (
-          <div
-            className="bg-destructive/10 border border-destructive/30 rounded-sm p-4 text-destructive text-sm font-body text-left mb-4"
-            data-ocid="admin.claim.error_state"
-          >
-            {claimError}
+        {/* Current identity display */}
+        {principal && (
+          <div className="bg-gold/5 border border-gold/20 rounded-sm p-4 text-left mb-4">
+            <p className="font-body text-cream/50 text-xs tracking-wider uppercase mb-1">
+              Your current identity
+            </p>
+            <p className="font-body text-cream/80 text-xs break-all font-mono leading-relaxed">
+              {principal}
+            </p>
           </div>
         )}
 
+        <div className="bg-gold/5 border border-gold/20 rounded-sm p-5 text-left mb-6">
+          <p className="font-body text-cream/80 text-sm leading-relaxed">
+            Your Internet Identity is not recognized as the admin. If you are
+            Minakshi, make sure you are signing in with the{" "}
+            <strong className="text-gold">same device and fingerprint</strong>{" "}
+            you used the very first time you set up this site.
+          </p>
+          <p className="font-body text-cream/50 text-xs mt-3 leading-relaxed">
+            If this is your first time accessing the admin panel, click "Claim
+            Admin Access" below.
+          </p>
+        </div>
+
         <div className="space-y-3">
           <Button
-            onClick={handleRecheck}
-            disabled={isRefreshing}
-            data-ocid="admin.recheck.primary_button"
+            onClick={onManualClaim}
+            disabled={isClaimPending}
+            data-ocid="admin.claim.primary_button"
             className="btn-gold w-full py-3 tracking-widest uppercase text-sm rounded-none inline-flex items-center justify-center gap-2"
           >
-            {isRefreshing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Checking…
-              </>
+            {isClaimPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <>
-                <RefreshCw className="w-4 h-4" />
-                Re-check Admin Status
-              </>
+              <Shield className="w-4 h-4" />
             )}
+            {isClaimPending ? "Claiming…" : "Claim Admin Access"}
+          </Button>
+
+          <Button
+            onClick={onRetry}
+            data-ocid="admin.retry.secondary_button"
+            variant="ghost"
+            className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/60 hover:text-cream hover:bg-cream/5 border border-gold/20 inline-flex items-center justify-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Try Again
           </Button>
 
           <Button
             onClick={handleSignOut}
             variant="ghost"
             data-ocid="admin.signout.secondary_button"
-            className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/60 hover:text-cream hover:bg-cream/5 border border-gold/20"
+            className="w-full py-3 tracking-widest uppercase text-sm rounded-none text-cream/60 hover:text-cream hover:bg-cream/5 inline-flex items-center justify-center gap-2"
           >
-            Sign Out
+            Sign Out &amp; Try Different Identity
           </Button>
-
-          <div className="pt-2 border-t border-gold/10">
-            <p className="font-body text-cream/35 text-xs mb-3">
-              First time setting up? Use this only if no admin exists yet.
-            </p>
-            <Button
-              onClick={handleClaimFirstTime}
-              disabled={claimFirstAdmin.isPending}
-              variant="ghost"
-              data-ocid="admin.claim.button"
-              className="w-full py-3 tracking-widest uppercase text-xs rounded-none text-cream/40 hover:text-cream hover:bg-cream/5"
-            >
-              {claimFirstAdmin.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Claiming…
-                </>
-              ) : (
-                "Claim Admin (First Time Only)"
-              )}
-            </Button>
-          </div>
         </div>
       </div>
     </div>
